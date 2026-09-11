@@ -140,38 +140,36 @@ export default function HargaClient() {
 
             <div className="px-6 py-4">
               <p className="mb-3 max-w-[80ch] text-[13px] text-slate-7">
-                Satu baris = satu toko. Kolom pertama adalah harga untuk pelanggan umum; kolom member
-                mengisi harga khusus — kosongkan agar member mengikuti harga umum toko itu.
+                Satu baris = satu pelanggan (baris pertama harga umum). Setiap kolom adalah satu toko —
+                kosongkan sel member agar mengikuti harga umum toko itu.
               </p>
 
               <div className="table-wrap">
                 <table className="tbl min-w-[900px]">
                   <thead>
                     <tr>
-                      <th className="w-[170px]">Toko</th>
-                      <th className="w-[130px] text-right">Harga umum</th>
-                      <th className="w-[90px] text-right">Margin</th>
-                      {data.customers.map((c) => (
-                        <th key={c.id} className="w-[130px] text-right">
-                          {c.name}{" "}
-                          <span className="font-normal normal-case tracking-normal">{c.tier}</span>
+                      <th className="w-[170px]">Pelanggan</th>
+                      {data.stores.map((s) => (
+                        <th key={s.id} className="w-[150px] text-right">
+                          <div className="normal-case tracking-normal text-[13px] font-bold text-ink">{s.name}</div>
+                          <div className="normal-case tracking-normal text-[10px] font-normal text-slate-6">
+                            {s.code} · stok {num(s.stock)} {data.item.unitCode === "GR" ? "g" : "pcs"}
+                          </div>
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {data.stores.map((s) => {
-                      const general = cellValue(s.id, null) ?? 0;
-                      const margin = general ? ((general - data.item.cost) / general) * 100 : 0;
-                      return (
-                        <tr key={s.id}>
-                          <td>
-                            <div className="text-sm font-semibold">{s.name}</div>
-                            <div className="text-[11px] text-slate-7">
-                              {s.code} · stok {num(s.stock)} {data.item.unitCode === "GR" ? "g" : "pcs"}
-                            </div>
-                          </td>
-                          <td>
+                    <tr>
+                      <td>
+                        <div className="text-sm font-semibold">Harga umum</div>
+                        <div className="text-[11px] text-slate-7">Pelanggan tanpa member</div>
+                      </td>
+                      {data.stores.map((s) => {
+                        const general = cellValue(s.id, null) ?? 0;
+                        const margin = general ? ((general - data.item.cost) / general) * 100 : 0;
+                        return (
+                          <td key={s.id}>
                             <input
                               inputMode="numeric"
                               className="input h-9 text-right font-semibold"
@@ -183,30 +181,43 @@ export default function HargaClient() {
                                 }))
                               }
                             />
+                            <div
+                              className={clsx(
+                                "mt-1 text-right text-[11px] font-semibold",
+                                margin < 15 ? "text-brand-600" : "text-slate-7"
+                              )}
+                            >
+                              margin {margin.toFixed(0)}%
+                            </div>
                           </td>
-                          <td className={clsx("text-right text-[13px] font-semibold", margin < 15 ? "text-brand-600" : "text-slate-8")}>
-                            {margin.toFixed(0)}%
-                          </td>
-                          {data.customers.map((c) => {
-                            const v = cellValue(s.id, c.id);
-                            return (
-                              <td key={c.id}>
-                                <input
-                                  inputMode="numeric"
-                                  className={clsx("input h-9 text-right", v !== null && "font-semibold text-brand-700")}
-                                  placeholder="ikut umum"
-                                  value={v !== null ? num(v) : ""}
-                                  onChange={(e) => {
-                                    const raw = e.target.value.replace(/\D/g, "");
-                                    setEdits((p) => ({ ...p, [key(s.id, c.id)]: raw === "" ? null : Number(raw) }));
-                                  }}
-                                />
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
+                        );
+                      })}
+                    </tr>
+                    {data.customers.map((c) => (
+                      <tr key={c.id}>
+                        <td>
+                          <div className="text-sm font-semibold">{c.name}</div>
+                          <div className="text-[11px] text-slate-7">{c.tier}</div>
+                        </td>
+                        {data.stores.map((s) => {
+                          const v = cellValue(s.id, c.id);
+                          return (
+                            <td key={s.id}>
+                              <input
+                                inputMode="numeric"
+                                className={clsx("input h-9 text-right", v !== null && "font-semibold text-brand-700")}
+                                placeholder="ikut umum"
+                                value={v !== null ? num(v) : ""}
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/\D/g, "");
+                                  setEdits((p) => ({ ...p, [key(s.id, c.id)]: raw === "" ? null : Number(raw) }));
+                                }}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
