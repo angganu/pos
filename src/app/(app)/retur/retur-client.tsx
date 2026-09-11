@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, Loading, EmptyState } from "@/components/ui";
+import { PageHeader, Loading, EmptyState, SearchSelect } from "@/components/ui";
 import { api, qs } from "@/lib/client";
 import { rp, num, fdatetime } from "@/lib/format";
 
@@ -189,12 +189,16 @@ export default function ReturClient() {
             </div>
             <div className="field mb-3">
               <label htmlFor="reason">Alasan retur</label>
-              <select id="reason" className="input h-10" value={reason} onChange={(e) => setReason(e.target.value)}>
-                <option>Barang rusak / kadaluarsa</option>
-                <option>Salah barang</option>
-                <option>Pelanggan batal</option>
-                <option>Kelebihan kirim</option>
-              </select>
+              <SearchSelect
+                id="reason"
+                className="input h-10"
+                value={reason}
+                onChange={setReason}
+                options={["Barang rusak / kadaluarsa", "Salah barang", "Pelanggan batal", "Kelebihan kirim"].map((r) => ({
+                  value: r,
+                  label: r,
+                }))}
+              />
             </div>
             <button className="btn btn-primary h-12 w-full justify-center text-base" onClick={submit} disabled={busy || count === 0}>
               {busy ? "Memproses…" : "Proses retur & sesuaikan stok"}

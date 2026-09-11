@@ -4,7 +4,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, Loading, Modal } from "@/components/ui";
+import { PageHeader, Loading, Modal, SearchSelect } from "@/components/ui";
 import { api } from "@/lib/client";
 import { fdatetime, initials } from "@/lib/format";
 
@@ -198,17 +198,25 @@ export default function PenggunaClient() {
           </div>
           <div className="field">
             <label htmlFor="r">Peran</label>
-            <select id="r" className="input h-10" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              {ROLES.map((r) => <option key={r} value={r}>{ROLE_ID[r]}</option>)}
-            </select>
+            <SearchSelect
+              id="r"
+              className="input h-10"
+              value={form.role}
+              onChange={(v) => setForm({ ...form, role: v })}
+              options={ROLES.map((r) => ({ value: r, label: ROLE_ID[r] }))}
+            />
           </div>
           {needsStore && (
             <div className="field">
               <label htmlFor="s">Ditugaskan ke toko</label>
-              <select id="s" className="input h-10" value={form.storeId} onChange={(e) => setForm({ ...form, storeId: e.target.value })}>
-                <option value="">Pilih toko…</option>
-                {stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-              </select>
+              <SearchSelect
+                id="s"
+                className="input h-10"
+                value={form.storeId}
+                onChange={(v) => setForm({ ...form, storeId: v })}
+                placeholder="Pilih toko…"
+                options={stores.map((s) => ({ value: String(s.id), label: `${s.code} · ${s.name}` }))}
+              />
             </div>
           )}
         </div>

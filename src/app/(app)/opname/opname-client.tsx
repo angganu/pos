@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, Loading, EmptyState } from "@/components/ui";
+import { PageHeader, Loading, EmptyState, SearchSelect } from "@/components/ui";
 import { api, qs } from "@/lib/client";
 import { rp, num, fdate } from "@/lib/format";
 
@@ -122,18 +122,24 @@ export default function OpnameClient() {
           <div className="mb-3.5 flex flex-wrap items-end gap-3">
             <div className="field min-w-[220px]">
               <label htmlFor="from">Dari toko</label>
-              <select id="from" className="input h-10" value={fromStore ?? ""} onChange={(e) => setFromStore(Number(e.target.value))}>
-                {stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-              </select>
+              <SearchSelect
+                id="from"
+                className="input h-10"
+                value={fromStore !== null ? String(fromStore) : ""}
+                onChange={(v) => setFromStore(Number(v))}
+                options={stores.map((s) => ({ value: String(s.id), label: `${s.code} · ${s.name}` }))}
+              />
             </div>
             <div className="field min-w-[220px]">
               <label htmlFor="to">Ke toko</label>
-              <select id="to" className="input h-10" value={toStore ?? ""} onChange={(e) => setToStore(Number(e.target.value))}>
-                <option value="">Pilih toko tujuan…</option>
-                {stores.filter((s) => s.id !== fromStore).map((s) => (
-                  <option key={s.id} value={s.id}>{s.code} · {s.name}</option>
-                ))}
-              </select>
+              <SearchSelect
+                id="to"
+                className="input h-10"
+                value={toStore !== null ? String(toStore) : ""}
+                onChange={(v) => setToStore(Number(v))}
+                placeholder="Pilih toko tujuan…"
+                options={stores.filter((s) => s.id !== fromStore).map((s) => ({ value: String(s.id), label: `${s.code} · ${s.name}` }))}
+              />
             </div>
             <button
               className="btn btn-secondary h-10"
@@ -159,15 +165,14 @@ export default function OpnameClient() {
                 {transferLines.map((l, i) => (
                   <tr key={i}>
                     <td>
-                      <select
+                      <SearchSelect
                         className="input h-9"
-                        value={l.itemId}
-                        onChange={(e) =>
-                          setTransferLines((c) => c.map((x, idx) => (idx === i ? { ...x, itemId: Number(e.target.value) } : x)))
+                        value={String(l.itemId)}
+                        onChange={(v) =>
+                          setTransferLines((c) => c.map((x, idx) => (idx === i ? { ...x, itemId: Number(v) } : x)))
                         }
-                      >
-                        {(items ?? []).map((it) => <option key={it.id} value={it.id}>{it.code} · {it.name}</option>)}
-                      </select>
+                        options={(items ?? []).map((it) => ({ value: String(it.id), label: `${it.code} · ${it.name}` }))}
+                      />
                     </td>
                     <td>
                       <input

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, StatCard, Loading, ErrorBox } from "@/components/ui";
+import { PageHeader, StatCard, Loading, ErrorBox, SearchSelect } from "@/components/ui";
 import { api, qs } from "@/lib/client";
 import { rp, num, initials } from "@/lib/format";
 
@@ -140,16 +140,13 @@ export default function PembelianClient() {
       <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4 px-6 pt-4">
         <div className="bg-white p-3.5 ring-1 ring-divider">
           <label htmlFor="sup" className="label-kicker mb-1.5 block">Supplier / Vendor</label>
-          <select
+          <SearchSelect
             id="sup"
             className="input h-11 text-[15px] font-semibold"
-            value={supplierId ?? ""}
-            onChange={(e) => setSupplierId(Number(e.target.value))}
-          >
-            {(suppliers ?? []).map((s) => (
-              <option key={s.id} value={s.id}>{s.code} · {s.name}</option>
-            ))}
-          </select>
+            value={supplierId !== null ? String(supplierId) : ""}
+            onChange={(v) => setSupplierId(Number(v))}
+            options={(suppliers ?? []).map((s) => ({ value: String(s.id), label: `${s.code} · ${s.name}` }))}
+          />
           {supplier && (
             <div className="mt-2 text-xs text-slate-7">
               {supplier.pic} · {supplier.phone} · {supplier.terms}
@@ -183,29 +180,23 @@ export default function PembelianClient() {
               {computed.map((l, i) => (
                 <tr key={i}>
                   <td>
-                    <select
+                    <SearchSelect
                       className="input h-9"
-                      value={l.itemId}
-                      onChange={(e) => changeItem(i, Number(e.target.value))}
-                    >
-                      {(items ?? []).map((it) => (
-                        <option key={it.id} value={it.id}>{it.code} · {it.name}</option>
-                      ))}
-                    </select>
+                      value={String(l.itemId)}
+                      onChange={(v) => changeItem(i, Number(v))}
+                      options={(items ?? []).map((it) => ({ value: String(it.id), label: `${it.code} · ${it.name}` }))}
+                    />
                   </td>
                   <td>
-                    <select
+                    <SearchSelect
                       className="input h-9"
                       value={l.unitLabel}
-                      onChange={(e) => {
-                        const u = l.item?.units.find((x) => x.label === e.target.value);
+                      onChange={(v) => {
+                        const u = l.item?.units.find((x) => x.label === v);
                         if (u) patchLine(i, { unitLabel: u.label, factor: u.factor });
                       }}
-                    >
-                      {(l.item?.units ?? []).map((u) => (
-                        <option key={u.id} value={u.label}>{u.label}</option>
-                      ))}
-                    </select>
+                      options={(l.item?.units ?? []).map((u) => ({ value: u.label, label: u.label }))}
+                    />
                   </td>
                   <td>
                     <input
@@ -334,23 +325,18 @@ export default function PembelianClient() {
                       );
                     })}
                     <td>
-                      <select
+                      <SearchSelect
                         className="input h-9 text-xs"
-                        defaultValue=""
-                        onChange={(e) => {
-                          const cid = e.target.value;
+                        value=""
+                        placeholder="+ Tambah harga member…"
+                        onChange={(cid) => {
                           if (!cid || !activeStoreId) return;
                           const key = `${l.itemId}|${activeStoreId}|${cid}`;
                           const price = window.prompt("Harga khusus member (angka saja):");
                           if (price) setNewPrices((p) => ({ ...p, [key]: Number(price.replace(/\D/g, "")) || 0 }));
-                          e.target.value = "";
                         }}
-                      >
-                        <option value="">+ Tambah harga member…</option>
-                        {(customers ?? []).map((c) => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.tier})</option>
-                        ))}
-                      </select>
+                        options={(customers ?? []).map((c) => ({ value: String(c.id), label: `${c.name} (${c.tier})` }))}
+                      />
                     </td>
                   </tr>
                 ))}

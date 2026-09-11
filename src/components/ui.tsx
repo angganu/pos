@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import clsx from "clsx";
+import { ChevronDown } from "lucide-react";
 
 export function PageHeader({
   kicker,
@@ -130,6 +133,173 @@ export function Modal({
         <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
         {footer && <div className="flex flex-none justify-end gap-2 border-t-2 border-divider px-5 py-3.5">{footer}</div>}
       </div>
+    </div>
+  );
+}
+
+export type ComboOption = { value: string; label: string; disabled?: boolean };
+
+/** Drop-in replacement for <select> that lets the user type to filter options. */
+export function SearchSelect({
+  id,
+  value,
+  onChange,
+  options,
+  placeholder = "Pilih…",
+  className = "input",
+  disabled,
+  emptyText = "Tidak ada hasil.",
+  ariaLabel,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: ComboOption[];
+  placeholder?: string;
+  className?: string;
+  disabled?: boolean;
+  emptyText?: string;
+  ariaLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const selected = options.find((o) => o.value === value) ?? null;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
+  function place() {
+    const el = inputRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+  }
+
+  function openList() {
+    if (disabled) return;
+    place();
+    setOpen(true);
+    setActive(0);
+  }
+
+  function closeList() {
+    setOpen(false);
+    setQuery("");
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const onScroll = () => place();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    setActive(0);
+  }, [query]);
+
+  function commit(opt: ComboOption) {
+    if (opt.disabled) return;
+    onChange(opt.value);
+    closeList();
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (disabled) return;
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        e.preventDefault();
+        openList();
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const opt = filtered[active];
+      if (opt) commit(opt);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      closeList();
+    } else if (e.key === "Tab") {
+      closeList();
+    }
+  }
+
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        ref={inputRef}
+        type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        aria-label={ariaLabel}
+        autoComplete="off"
+        disabled={disabled}
+        className={clsx(className, "pr-8")}
+        placeholder={placeholder}
+        value={open ? query : selected?.label ?? ""}
+        onFocus={openList}
+        onClick={openList}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          if (!open) setOpen(true);
+        }}
+        onKeyDown={onKeyDown}
+        onBlur={closeList}
+      />
+      <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-5" />
+      {open &&
+        rect &&
+        createPortal(
+          <ul
+            role="listbox"
+            style={{ position: "fixed", top: rect.top, left: rect.left, width: rect.width, zIndex: 9999 }}
+            className="max-h-56 overflow-y-auto bg-white py-1 text-sm shadow-2xl ring-1 ring-divider"
+          >
+            {filtered.length === 0 && <li className="px-3 py-2 text-slate-6">{emptyText}</li>}
+            {filtered.map((o, i) => (
+              <li
+                key={o.value}
+                role="option"
+                aria-selected={o.value === value}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  commit(o);
+                }}
+                onMouseEnter={() => setActive(i)}
+                className={clsx(
+                  "cursor-pointer px-3 py-1.5",
+                  i === active && "bg-brand-100",
+                  o.value === value && "font-semibold",
+                  o.disabled && "pointer-events-none opacity-45"
+                )}
+              >
+                {o.label}
+              </li>
+            ))}
+          </ul>,
+          document.body
+        )}
     </div>
   );
 }

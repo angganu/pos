@@ -2,6 +2,7 @@
 
 import { Menu, Wifi } from "lucide-react";
 import { useApp } from "./app-context";
+import { SearchSelect } from "./ui";
 import { ROLE_LABEL } from "@/lib/rbac";
 
 export default function Topbar() {
@@ -21,20 +22,17 @@ export default function Topbar() {
 
       <div className="flex min-w-0 flex-[1_1_220px] items-center gap-2">
         <span className="label-kicker whitespace-nowrap">Toko</span>
-        <select
+        <SearchSelect
           className="input h-[34px] w-auto min-w-0 max-w-[230px] flex-1 font-semibold"
           value={storeId === null ? "all" : String(storeId)}
-          onChange={(e) => setStoreId(e.target.value === "all" ? null : Number(e.target.value))}
+          onChange={(v) => setStoreId(v === "all" ? null : Number(v))}
           disabled={!canPickAllStores}
-          aria-label="Pilih toko"
-        >
-          {canPickAllStores && <option value="all">Semua toko</option>}
-          {stores.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.code} · {s.name}
-            </option>
-          ))}
-        </select>
+          ariaLabel="Pilih toko"
+          options={[
+            ...(canPickAllStores ? [{ value: "all", label: "Semua toko" }] : []),
+            ...stores.map((s) => ({ value: String(s.id), label: `${s.code} · ${s.name}` })),
+          ]}
+        />
       </div>
 
       <div className="ml-auto flex min-w-0 flex-none items-center gap-2.5">
