@@ -41,7 +41,7 @@ export default function LoginPage() {
             SP
           </div>
           <div>
-            <div className="text-lg font-extrabold leading-tight">SATU POS</div>
+            <div className="text-lg font-extrabold leading-tight">KASAKU</div>
             <div className="text-[11px] uppercase tracking-[0.14em] text-slate-4">Multi-Toko</div>
           </div>
         </div>
@@ -68,7 +68,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="text-xs text-slate-5">© {new Date().getFullYear()} SATU POS</p>
+        <p className="text-xs text-slate-5">© {new Date().getFullYear()} KASAKU</p>
       </div>
 
       {/* Form panel */}

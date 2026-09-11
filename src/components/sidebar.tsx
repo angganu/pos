@@ -88,7 +88,7 @@ export default function Sidebar() {
           SP
         </div>
         <div className={clsx("min-w-0 flex-1 transition-opacity duration-200", navOpen ? "opacity-100" : "opacity-0")}>
-          <div className="whitespace-nowrap text-base font-extrabold leading-tight">SATU POS</div>
+          <div className="whitespace-nowrap text-base font-extrabold leading-tight">KASAKU</div>
           <div className="whitespace-nowrap text-[11px] uppercase tracking-[0.06em] text-slate-4">
             Multi-Toko
           </div>

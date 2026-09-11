@@ -1,4 +1,4 @@
-# SATU POS — Sistem Kasir Multi-Toko
+# KASAKU — Sistem Kasir Multi-Toko
 
 Point-of-sale for a multi-store retail business, built with **Next.js 15 (App Router) · TypeScript · Tailwind CSS v4 · Prisma · MySQL**.
 

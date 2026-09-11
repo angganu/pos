@@ -114,7 +114,7 @@ const OFFERS: Record<string, Record<string, number>> = {
 };
 
 async function main() {
-  console.log("→ Seeding SATU POS…");
+  console.log("→ Seeding KASAKU…");
 
   // Wipe in dependency order so the seed is re-runnable.
   await prisma.$transaction([
@@ -333,7 +333,7 @@ async function main() {
 
   await prisma.setting.createMany({
     data: [
-      { key: "company.name", value: "SATU POS" },
+      { key: "company.name", value: "KASAKU" },
       { key: "tax.rate", value: "11" },
       { key: "tax.enabled", value: "true" },
       { key: "receipt.footer", value: "Terima kasih — Thank you" },

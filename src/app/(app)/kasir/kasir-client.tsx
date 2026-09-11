@@ -612,7 +612,7 @@ export default function KasirClient() {
       >
         {receipt && (
           <div className="font-mono text-xs leading-relaxed ring-1 ring-divider p-4">
-            <div className="text-center font-bold tracking-widest">SATU POS</div>
+            <div className="text-center font-bold tracking-widest">KASAKU</div>
             <div className="text-center">{receipt.store.name}</div>
             <div className="text-center">{receipt.store.address}</div>
             <div className="my-2 border-t border-dashed border-slate-5" />

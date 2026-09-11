@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SATU POS — Sistem Kasir Multi-Toko",
+  title: "KASAKU — Sistem Kasir Multi-Toko",
   description: "Point of Sale multi-toko dengan harga per toko dan harga khusus member.",
 };
 
