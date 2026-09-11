@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #f0f4f8;
+  --color-surface: #e4ebf3;
+  --color-ink: #1c2430;
+  --color-divider: #b6c2d0;
+
+  --color-brand-100: #eef4fa;
+  --color-brand-200: #d8e7f4;
+  --color-brand-300: #b6d2ea;
+  --color-brand-400: #7fb0d8;
+  --color-brand-500: #4a8cc4;
+  --color-brand-600: #2b6ea8;
+  --color-brand-700: #1f5384;
+  --color-brand-800: #173e64;
+  --color-brand-900: #102b46;
+
+  --color-teal-100: #eff7f6;
+  --color-teal-200: #d9edeb;
+  --color-teal-300: #b9ded9;
+  --color-teal-400: #83c2bb;
+  --color-teal-500: #52a49c;
+  --color-teal-600: #3f8f8a;
+  --color-teal-700: #2e6d69;
+
+  --color-slate-1: #f7f9fc;
+  --color-slate-2: #e8edf3;
+  --color-slate-3: #d5dde7;
+  --color-slate-4: #b6c2d0;
+  --color-slate-5: #96a4b5;
+  --color-slate-6: #798898;
+  --color-slate-7: #5d6a79;
+  --color-slate-8: #414d5b;
+  --color-slate-9: #2a3440;
+
+  --font-heading: Archivo, ui-sans-serif, system-ui, sans-serif;
+  --font-body: Archivo, ui-sans-serif, system-ui, sans-serif;
+
+  --radius-none: 0px;
+}
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  a {
+    color: var(--color-brand-600);
+    text-underline-offset: 3px;
+  }
+  a:hover {
+    color: var(--color-brand-700);
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-brand-200);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-slate-4);
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-slate-2);
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+  }
+}
+
+@layer components {
+  /* Flat, zero-radius, strong-rule vocabulary from the Modernist system. */
+  .label-kicker {
+    @apply text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-6;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-2 border-0 px-4 py-2 text-sm font-semibold
+      transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800;
+  }
+  .btn-secondary {
+    @apply bg-transparent text-ink ring-1 ring-divider hover:bg-slate-2 active:bg-slate-3;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-ink hover:bg-slate-2 active:bg-slate-3;
+  }
+  .btn-danger {
+    @apply bg-transparent text-brand-700 ring-1 ring-brand-400 hover:bg-brand-100;
+  }
+
+  .input {
+    @apply w-full border-0 bg-white px-3 py-2 text-sm text-ink ring-1 ring-divider
+      placeholder:text-slate-5 focus:ring-2 focus:ring-brand-600 focus:outline-none
+      disabled:bg-slate-2 disabled:opacity-60;
+  }
+
+  .field label {
+    @apply mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-6;
+  }
+
+  .tag {
+    @apply inline-flex items-center px-2 py-0.5 text-[11px] font-semibold;
+  }
+  .tag-accent {
+    @apply bg-brand-200 text-brand-800;
+  }
+  .tag-teal {
+    @apply bg-teal-200 text-teal-700;
+  }
+  .tag-neutral {
+    @apply bg-slate-3 text-slate-8;
+  }
+
+  .table-wrap {
+    @apply w-full overflow-x-auto;
+  }
+  .tbl {
+    @apply w-full border-collapse text-sm;
+  }
+  .tbl thead th {
+    @apply border-b-2 border-ink bg-transparent px-3 py-2 text-left text-[10px]
+      font-extrabold uppercase tracking-[0.12em] text-slate-7 whitespace-nowrap;
+  }
+  .tbl tbody td {
+    @apply border-b border-divider px-3 py-2 align-middle;
+  }
+  .tbl tbody tr:hover {
+    @apply bg-slate-2/60;
+  }
+
+  .panel {
+    @apply bg-white ring-1 ring-divider;
+  }
+
+  .rule {
+    @apply h-0.5 w-full bg-divider;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+}

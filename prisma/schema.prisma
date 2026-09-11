@@ -1,0 +1,516 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+enum MovementType {
+  PURCHASE
+  SALE
+  RETURN_IN
+  RETURN_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+  OPENING
+}
+
+enum ReturnType {
+  SALE
+  PURCHASE
+}
+
+enum PaymentMethod {
+  CASH
+  QRIS
+  CARD
+  SPLIT
+}
+
+enum DocStatus {
+  DRAFT
+  POSTED
+  VOID
+}
+
+enum TransferStatus {
+  DRAFT
+  SENT
+  RECEIVED
+  CANCELLED
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(120)
+  email        String    @unique @db.VarChar(160)
+  passwordHash String    @db.VarChar(255)
+  role         Role
+  storeId      Int?
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  store     Store?          @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  sales     Sale[]
+  purchases Purchase[]
+  returns   ReturnDoc[]
+  transfers Transfer[]
+  opnames   StockOpname[]
+  shifts    Shift[]
+  movements StockMovement[]
+  audits    AuditLog[]
+  heldSales HeldSale[]
+
+  @@index([storeId])
+  @@index([role])
+}
+
+model Store {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(20)
+  name      String   @db.VarChar(160)
+  address   String?  @db.VarChar(255)
+  phone     String?  @db.VarChar(40)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  stocks        ItemStock[]
+  prices        ItemPrice[]
+  sales         Sale[]
+  purchases     Purchase[]
+  returns       ReturnDoc[]
+  movements     StockMovement[]
+  transfersFrom Transfer[]      @relation("TransferFrom")
+  transfersTo   Transfer[]      @relation("TransferTo")
+  opnames       StockOpname[]
+  shifts        Shift[]
+  heldSales     HeldSale[]
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(20)
+  name      String   @db.VarChar(160)
+  address   String?  @db.VarChar(255)
+  phone     String?  @db.VarChar(40)
+  tier      String   @default("Member") @db.VarChar(40)
+  points    Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prices    ItemPrice[]
+  sales     Sale[]
+  heldSales HeldSale[]
+}
+
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(20)
+  name      String   @db.VarChar(160)
+  address   String?  @db.VarChar(255)
+  phone     String?  @db.VarChar(40)
+  pic       String?  @db.VarChar(120)
+  terms     String?  @db.VarChar(80)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchases Purchase[]
+  returns   ReturnDoc[]
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique @db.VarChar(20)
+  name        String   @db.VarChar(120)
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now())
+
+  items Item[]
+}
+
+model Unit {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(20)
+  name      String   @db.VarChar(60)
+  createdAt DateTime @default(now())
+
+  baseItems Item[]     @relation("BaseUnit")
+  itemUnits ItemUnit[]
+}
+
+model Item {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique @db.VarChar(40)
+  barcode     String?  @unique @db.VarChar(60)
+  name        String   @db.VarChar(180)
+  description String?  @db.Text
+  imageUrl    String?  @db.VarChar(400)
+  categoryId  Int
+  baseUnitId  Int
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category   Category        @relation(fields: [categoryId], references: [id])
+  baseUnit   Unit            @relation("BaseUnit", fields: [baseUnitId], references: [id])
+  itemUnits  ItemUnit[]
+  stocks     ItemStock[]
+  prices     ItemPrice[]
+  saleLines  SaleLine[]
+  purchLines PurchaseLine[]
+  retLines   ReturnLine[]
+  movements  StockMovement[]
+  transLines TransferLine[]
+  opnLines   OpnameLine[]
+
+  @@index([categoryId])
+  @@index([name])
+}
+
+/// Alternative purchase/sale units. factor converts 1 of this unit into base units.
+/// e.g. base = Gram, unit = "Sak 25 Kg", factor = 25000
+model ItemUnit {
+  id       Int     @id @default(autoincrement())
+  itemId   Int
+  unitId   Int
+  label    String  @db.VarChar(80)
+  factor   Decimal @db.Decimal(18, 4)
+  isBase   Boolean @default(false)
+  isBuying Boolean @default(true)
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@unique([itemId, label])
+  @@index([itemId])
+}
+
+model ItemStock {
+  id        Int      @id @default(autoincrement())
+  itemId    Int
+  storeId   Int
+  stock     Decimal  @default(0) @db.Decimal(18, 4)
+  minStock  Decimal  @default(0) @db.Decimal(18, 4)
+  updatedAt DateTime @updatedAt
+
+  item  Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, storeId])
+  @@index([storeId])
+}
+
+/// Price per item per store. customerId NULL = general (non-member) price.
+/// customerId set = special price dedicated to that member, in that store.
+model ItemPrice {
+  id            Int       @id @default(autoincrement())
+  itemId        Int
+  storeId       Int
+  customerId    Int?
+  price         Decimal   @db.Decimal(18, 4)
+  effectiveFrom DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, storeId, customerId])
+  @@index([storeId])
+  @@index([customerId])
+}
+
+model Purchase {
+  id         Int       @id @default(autoincrement())
+  code       String    @unique @db.VarChar(40)
+  supplierId Int
+  storeId    Int
+  userId     Int
+  date       DateTime  @default(now())
+  subtotal   Decimal   @default(0) @db.Decimal(18, 2)
+  discount   Decimal   @default(0) @db.Decimal(18, 2)
+  tax        Decimal   @default(0) @db.Decimal(18, 2)
+  total      Decimal   @default(0) @db.Decimal(18, 2)
+  status     DocStatus @default(POSTED)
+  note       String?   @db.VarChar(255)
+  createdAt  DateTime  @default(now())
+
+  supplier Supplier       @relation(fields: [supplierId], references: [id])
+  store    Store          @relation(fields: [storeId], references: [id])
+  user     User           @relation(fields: [userId], references: [id])
+  lines    PurchaseLine[]
+
+  @@index([storeId, date])
+  @@index([supplierId])
+}
+
+model PurchaseLine {
+  id           Int     @id @default(autoincrement())
+  purchaseId   Int
+  itemId       Int
+  unitLabel    String  @db.VarChar(80)
+  factor       Decimal @db.Decimal(18, 4)
+  qty          Decimal @db.Decimal(18, 4)
+  baseQty      Decimal @db.Decimal(18, 4)
+  pricePerUnit Decimal @db.Decimal(18, 4)
+  pricePerBase Decimal @db.Decimal(18, 4)
+  discount     Decimal @default(0) @db.Decimal(18, 2)
+  total        Decimal @db.Decimal(18, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id])
+
+  @@index([purchaseId])
+  @@index([itemId])
+}
+
+model Sale {
+  id            Int           @id @default(autoincrement())
+  code          String        @unique @db.VarChar(40)
+  storeId       Int
+  customerId    Int?
+  userId        Int
+  shiftId       Int?
+  date          DateTime      @default(now())
+  subtotal      Decimal       @default(0) @db.Decimal(18, 2)
+  discount      Decimal       @default(0) @db.Decimal(18, 2)
+  tax           Decimal       @default(0) @db.Decimal(18, 2)
+  total         Decimal       @default(0) @db.Decimal(18, 2)
+  cogs          Decimal       @default(0) @db.Decimal(18, 2)
+  paid          Decimal       @default(0) @db.Decimal(18, 2)
+  change        Decimal       @default(0) @db.Decimal(18, 2)
+  paymentMethod PaymentMethod @default(CASH)
+  paymentMeta   Json?
+  pointsEarned  Int           @default(0)
+  status        DocStatus     @default(POSTED)
+  createdAt     DateTime      @default(now())
+
+  store    Store       @relation(fields: [storeId], references: [id])
+  customer Customer?   @relation(fields: [customerId], references: [id])
+  user     User        @relation(fields: [userId], references: [id])
+  shift    Shift?      @relation(fields: [shiftId], references: [id])
+  lines    SaleLine[]
+  returns  ReturnDoc[]
+
+  @@index([storeId, date])
+  @@index([customerId])
+  @@index([shiftId])
+}
+
+model SaleLine {
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  itemId    Int
+  qty       Decimal @db.Decimal(18, 4)
+  unitPrice Decimal @db.Decimal(18, 4)
+  basePrice Decimal @db.Decimal(18, 4)
+  unitCost  Decimal @default(0) @db.Decimal(18, 4)
+  discount  Decimal @default(0) @db.Decimal(18, 2)
+  total     Decimal @db.Decimal(18, 2)
+  isMember  Boolean @default(false)
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@index([saleId])
+  @@index([itemId])
+}
+
+model ReturnDoc {
+  id         Int        @id @default(autoincrement())
+  code       String     @unique @db.VarChar(40)
+  type       ReturnType
+  storeId    Int
+  userId     Int
+  saleId     Int?
+  supplierId Int?
+  date       DateTime   @default(now())
+  total      Decimal    @default(0) @db.Decimal(18, 2)
+  reason     String?    @db.VarChar(255)
+  createdAt  DateTime   @default(now())
+
+  store    Store        @relation(fields: [storeId], references: [id])
+  user     User         @relation(fields: [userId], references: [id])
+  sale     Sale?        @relation(fields: [saleId], references: [id])
+  supplier Supplier?    @relation(fields: [supplierId], references: [id])
+  lines    ReturnLine[]
+
+  @@index([storeId, date])
+}
+
+model ReturnLine {
+  id       Int     @id @default(autoincrement())
+  returnId Int
+  itemId   Int
+  qty      Decimal @db.Decimal(18, 4)
+  price    Decimal @db.Decimal(18, 4)
+  total    Decimal @db.Decimal(18, 2)
+
+  returnDoc ReturnDoc @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  item      Item      @relation(fields: [itemId], references: [id])
+
+  @@index([returnId])
+}
+
+model Transfer {
+  id          Int            @id @default(autoincrement())
+  code        String         @unique @db.VarChar(40)
+  fromStoreId Int
+  toStoreId   Int
+  userId      Int
+  date        DateTime       @default(now())
+  status      TransferStatus @default(SENT)
+  note        String?        @db.VarChar(255)
+  createdAt   DateTime       @default(now())
+
+  fromStore Store          @relation("TransferFrom", fields: [fromStoreId], references: [id])
+  toStore   Store          @relation("TransferTo", fields: [toStoreId], references: [id])
+  user      User           @relation(fields: [userId], references: [id])
+  lines     TransferLine[]
+
+  @@index([fromStoreId])
+  @@index([toStoreId])
+}
+
+model TransferLine {
+  id         Int     @id @default(autoincrement())
+  transferId Int
+  itemId     Int
+  qty        Decimal @db.Decimal(18, 4)
+
+  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id])
+
+  @@index([transferId])
+}
+
+model StockOpname {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique @db.VarChar(40)
+  storeId   Int
+  userId    Int
+  date      DateTime  @default(now())
+  status    DocStatus @default(DRAFT)
+  note      String?   @db.VarChar(255)
+  createdAt DateTime  @default(now())
+
+  store Store        @relation(fields: [storeId], references: [id])
+  user  User         @relation(fields: [userId], references: [id])
+  lines OpnameLine[]
+
+  @@index([storeId, date])
+}
+
+model OpnameLine {
+  id          Int     @id @default(autoincrement())
+  opnameId    Int
+  itemId      Int
+  systemQty   Decimal @db.Decimal(18, 4)
+  physicalQty Decimal @db.Decimal(18, 4)
+  diff        Decimal @db.Decimal(18, 4)
+  value       Decimal @default(0) @db.Decimal(18, 2)
+
+  opname StockOpname @relation(fields: [opnameId], references: [id], onDelete: Cascade)
+  item   Item        @relation(fields: [itemId], references: [id])
+
+  @@index([opnameId])
+}
+
+/// Kartu stok — every stock change lands here, with the resulting balance.
+model StockMovement {
+  id          Int          @id @default(autoincrement())
+  itemId      Int
+  storeId     Int
+  userId      Int?
+  type        MovementType
+  qty         Decimal      @db.Decimal(18, 4)
+  balanceAfter Decimal     @db.Decimal(18, 4)
+  unitCost    Decimal      @default(0) @db.Decimal(18, 4)
+  refType     String?      @db.VarChar(40)
+  refId       Int?
+  note        String?      @db.VarChar(255)
+  createdAt   DateTime     @default(now())
+
+  item  Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id])
+
+  @@index([itemId, storeId, createdAt])
+  @@index([storeId, createdAt])
+}
+
+model Shift {
+  id           Int       @id @default(autoincrement())
+  code         String    @unique @db.VarChar(40)
+  storeId      Int
+  userId       Int
+  openedAt     DateTime  @default(now())
+  closedAt     DateTime?
+  openingCash  Decimal   @default(0) @db.Decimal(18, 2)
+  closingCash  Decimal?  @db.Decimal(18, 2)
+  expectedCash Decimal?  @db.Decimal(18, 2)
+  difference   Decimal?  @db.Decimal(18, 2)
+  note         String?   @db.VarChar(255)
+
+  store Store  @relation(fields: [storeId], references: [id])
+  user  User   @relation(fields: [userId], references: [id])
+  sales Sale[]
+
+  @@index([storeId, openedAt])
+}
+
+/// Parked / held sales — the cart payload is stored as JSON until resumed.
+model HeldSale {
+  id         Int      @id @default(autoincrement())
+  label      String   @db.VarChar(120)
+  storeId    Int
+  userId     Int
+  customerId Int?
+  total      Decimal  @default(0) @db.Decimal(18, 2)
+  payload    Json
+  createdAt  DateTime @default(now())
+
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([storeId])
+}
+
+model Setting {
+  key       String   @id @db.VarChar(80)
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String   @db.VarChar(80)
+  entity    String   @db.VarChar(80)
+  entityId  String?  @db.VarChar(80)
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
