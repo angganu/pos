@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MovementType } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, qpInt, qpDate, audit } from "@/lib/api";
+import { route, ok, fail, qp, qpInt, qpDate, audit } from "@/lib/api";
 import { requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { applyMovement, nextSeq } from "@/lib/stock";
 import { setPrice } from "@/lib/pricing";
@@ -9,15 +9,48 @@ import { round2, round4, toBaseQty, toBasePrice } from "@/lib/units";
 import { docCode } from "@/lib/format";
 
 export const GET = route(async ({ user, req }) => {
-  requirePerm(user, "purchase.manage");
   const { storeId } = resolveStoreScope(user, qpInt(req, "storeId"));
   const from = qpDate(req, "from");
   const to = qpDate(req, "to");
+  const id = qpInt(req, "id");
+  const q = qp(req).get("q")?.trim();
+  const supplierId = qpInt(req, "supplierId");
+  const itemId = qpInt(req, "itemId");
+
+  if (id) {
+    const purchase = await prisma.purchase.findUnique({
+      where: { id },
+      include: {
+        store: true, supplier: true, user: { select: { name: true } },
+        lines: { include: { item: { include: { baseUnit: true } } } },
+      },
+    });
+    if (!purchase) return fail("Transaksi tidak ditemukan.", 404);
+    return ok(
+      serialize({
+        ...purchase,
+        subtotal: dec(purchase.subtotal), discount: dec(purchase.discount),
+        tax: dec(purchase.tax), total: dec(purchase.total),
+        lines: purchase.lines.map((l) => ({
+          id: l.id, itemName: l.item.name, itemCode: l.item.code,
+          unitLabel: l.unitLabel, factor: dec(l.factor),
+          qty: dec(l.qty), baseQty: dec(l.baseQty), baseUnit: l.item.baseUnit.name,
+          pricePerUnit: dec(l.pricePerUnit), pricePerBase: dec(l.pricePerBase),
+          discount: dec(l.discount), total: dec(l.total),
+        })),
+      })
+    );
+  }
 
   const purchases = await prisma.purchase.findMany({
     where: {
       ...(storeId ? { storeId } : {}),
       ...(from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+      ...(supplierId ? { supplierId } : {}),
+      ...(itemId ? { lines: { some: { itemId } } } : {}),
+      ...(q
+        ? { OR: [{ code: { contains: q } }, { supplier: { name: { contains: q } } }, { supplier: { code: { contains: q } } }] }
+        : {}),
     },
     include: {
       supplier: { select: { code: true, name: true } },

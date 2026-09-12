@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MovementType, PaymentMethod } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, fail, qpInt, qpDate, audit } from "@/lib/api";
+import { route, ok, fail, qp, qpInt, qpDate, audit } from "@/lib/api";
 import { requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { applyMovement, assertStockAvailable, currentCost, nextSeq } from "@/lib/stock";
 import { resolvePrices } from "@/lib/pricing";
@@ -12,6 +12,9 @@ export const GET = route(async ({ user, req }) => {
   const from = qpDate(req, "from");
   const to = qpDate(req, "to");
   const id = qpInt(req, "id");
+  const q = qp(req).get("q")?.trim();
+  const customerId = qpInt(req, "customerId");
+  const itemId = qpInt(req, "itemId");
 
   if (id) {
     const sale = await prisma.sale.findUnique({
@@ -42,6 +45,11 @@ export const GET = route(async ({ user, req }) => {
     where: {
       ...(storeId ? { storeId } : {}),
       ...(from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+      ...(customerId ? { customerId } : {}),
+      ...(itemId ? { lines: { some: { itemId } } } : {}),
+      ...(q
+        ? { OR: [{ code: { contains: q } }, { customer: { name: { contains: q } } }, { customer: { code: { contains: q } } }] }
+        : {}),
     },
     include: {
       store: { select: { code: true, name: true } },

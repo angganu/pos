@@ -7,7 +7,7 @@ import clsx from "clsx";
 import {
   ShoppingCart, Truck, RotateCcw, Package, Tags, Users, Building2, Boxes,
   ArrowLeftRight, BarChart3, GitCompareArrows, FileText, ShieldCheck,
-  ChevronUp, Settings, Monitor, User, LogOut,
+  ChevronUp, Settings, Monitor, User, LogOut, Receipt, PackageSearch,
 } from "lucide-react";
 import { useApp } from "./app-context";
 import { can, type Permission } from "@/lib/rbac";
@@ -46,6 +46,8 @@ const GROUPS: NavGroup[] = [
     title: "Laporan / Reports",
     items: [
       { href: "/laba", id: "laba", label: "Dasbor Laba", en: "Profit", icon: BarChart3, perm: "store.all" },
+      { href: "/riwayat-penjualan", id: "riwayat-penjualan", label: "Riwayat Penjualan", en: "Sales History", icon: Receipt, perm: "history.view" },
+      { href: "/riwayat-pembelian", id: "riwayat-pembelian", label: "Riwayat Pembelian", en: "Purchase History", icon: PackageSearch, perm: "history.view" },
       { href: "/banding", id: "banding", label: "Banding Supplier", en: "Compare", icon: GitCompareArrows, perm: "supplier.compare" },
       { href: "/laporan", id: "laporan", label: "Laporan & Ekspor", en: "Reports", icon: FileText, perm: "report.view" },
     ],

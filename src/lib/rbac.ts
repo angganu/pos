@@ -18,25 +18,29 @@ export type Permission =
   | "report.view"
   | "supplier.compare"
   | "store.all"
-  | "user.manage";
+  | "user.manage"
+  | "history.view";
 
 const MATRIX: Record<Role, Permission[]> = {
   ADMIN: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
     "item.manage", "price.manage", "partner.manage", "stock.view", "stock.adjust",
     "transfer.manage", "report.view", "supplier.compare", "store.all", "user.manage",
+    "history.view",
   ],
   OWNER: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
     "item.manage", "price.manage", "partner.manage", "stock.view", "stock.adjust",
     "transfer.manage", "report.view", "supplier.compare", "store.all",
+    "history.view",
   ],
   MANAGER: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
     "price.manage", "partner.manage", "stock.view", "stock.adjust", "transfer.manage",
     "report.view",
+    "history.view",
   ],
-  CASHIER: ["sale.create", "shift.close", "return.manage", "stock.view"],
+  CASHIER: ["sale.create", "shift.close", "return.manage", "stock.view", "history.view"],
 };
 
 export function can(user: Pick<SessionUser, "role">, perm: Permission): boolean {
@@ -88,6 +92,8 @@ export const NAV_PERMS: Record<string, Permission> = {
   stok: "stock.view",
   opname: "transfer.manage",
   laba: "store.all",
+  "riwayat-penjualan": "history.view",
+  "riwayat-pembelian": "history.view",
   banding: "supplier.compare",
   laporan: "report.view",
   pengguna: "user.manage",
