@@ -268,7 +268,7 @@ export default function OpnameClient() {
                         <td
                           className={clsx(
                             "text-right text-[15px] font-semibold",
-                            diff === null ? "text-slate-5" : diff === 0 ? "text-slate-6" : diff < 0 ? "text-brand-600" : "text-teal-700"
+                            diff === null ? "text-slate-5" : diff === 0 ? "text-slate-6" : diff < 0 ? "text-amber-700" : "text-teal-700"
                           )}
                         >
                           {diff === null ? "—" : `${diff > 0 ? "+" : ""}${num(diff)}`}

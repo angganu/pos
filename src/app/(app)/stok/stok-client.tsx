@@ -51,7 +51,7 @@ export default function StokClient() {
         <StatCard label="Jenis barang" value={num(data?.totals.itemCount ?? 0)} hint="barang aktif" />
         <StatCard
           label="Perlu diorder"
-          value={<span className="text-brand-600">{data?.totals.lowCount ?? 0} barang</span>}
+          value={<span className="text-amber-700">{data?.totals.lowCount ?? 0} barang</span>}
           hint="stok di bawah minimum"
         />
       </div>
@@ -96,14 +96,14 @@ export default function StokClient() {
                     </td>
                     <td className="text-[13px]">{r.unit}</td>
                     {r.perStore.map((p) => (
-                      <td key={p.storeId} className={clsx("text-right text-sm", p.low && "font-semibold text-brand-600")}>
+                      <td key={p.storeId} className={clsx("text-right text-sm", p.low && "font-semibold text-amber-700")}>
                         {num(p.stock)}
                       </td>
                     ))}
                     <td className="text-right text-sm font-semibold">{num(r.total)}</td>
                     <td className="text-right text-sm">{rp(r.value)}</td>
                     <td className="text-right">
-                      <span className={r.low ? "tag tag-accent" : "tag tag-neutral"}>
+                      <span className={r.low ? "tag tag-amber" : "tag tag-neutral"}>
                         {r.low ? "Perlu order" : "Aman"}
                       </span>
                     </td>

@@ -318,7 +318,7 @@ export default function PembelianClient() {
                               setNewPrices((p) => ({ ...p, [key]: Number(e.target.value.replace(/\D/g, "")) || 0 }))
                             }
                           />
-                          <div className={`mt-1 text-right text-[11px] ${margin < 15 ? "text-brand-600" : "text-slate-7"}`}>
+                          <div className={`mt-1 text-right text-[11px] ${margin < 15 ? "text-amber-700" : "text-slate-7"}`}>
                             margin {margin.toFixed(0)}%
                           </div>
                         </td>

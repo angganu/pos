@@ -280,7 +280,7 @@ export default function KasirClient() {
                       <div className={clsx("text-xs", isMember ? "font-semibold text-brand-700" : "text-slate-8")}>
                         {rp(price)} / {it.baseUnit.code === "GR" ? "g" : "pcs"}
                       </div>
-                      <div className={clsx("text-[11px]", it.low ? "text-brand-600" : "text-slate-6")}>
+                      <div className={clsx("text-[11px]", it.low ? "text-amber-700" : "text-slate-6")}>
                         {it.low ? "Stok tipis · " : "Stok "}
                         {num(it.stock)}
                       </div>
@@ -313,7 +313,7 @@ export default function KasirClient() {
                 {totals.saved > 0 && ` · Hemat ${rp(totals.saved)}`}
               </div>
             </div>
-            {customer && <span className="tag tag-accent">{customer.tier}</span>}
+            {customer && <span className="tag tag-violet">{customer.tier}</span>}
           </div>
         </div>
 
@@ -487,7 +487,7 @@ export default function KasirClient() {
 
           <div className="flex items-baseline justify-between bg-bg px-3.5 py-3">
             <span className="text-[13px] font-semibold">Kembalian / Change</span>
-            <span className={clsx("text-2xl font-extrabold", tender >= totals.total ? "text-ink" : "text-brand-600")}>
+            <span className={clsx("text-2xl font-extrabold", tender >= totals.total ? "text-ink" : "text-amber-700")}>
               {rp(Math.max(0, tender - totals.total))}
             </span>
           </div>
@@ -524,7 +524,7 @@ export default function KasirClient() {
                 <div className="text-sm font-semibold">{c.name}</div>
                 <div className="text-xs text-slate-7">{c.code} · {c.phone ?? "—"}</div>
               </div>
-              <span className="tag tag-neutral">{c.tier}</span>
+              <span className="tag tag-violet">{c.tier}</span>
             </button>
           ))}
         </div>

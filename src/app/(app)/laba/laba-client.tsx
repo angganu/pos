@@ -100,7 +100,7 @@ export default function LabaClient() {
                     <Tooltip formatter={(v: number) => rp(v)} contentStyle={{ fontSize: 12, borderRadius: 0 }} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Bar dataKey="revenue" name="Omzet" fill="#b6c2d0" />
-                    <Bar dataKey="profit" name="Laba kotor" fill="#2b6ea8" />
+                    <Bar dataKey="profit" name="Laba kotor" fill="#2563eb" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

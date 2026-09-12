@@ -68,7 +68,7 @@ export default function PelangganClient() {
                         </div>
                       </div>
                     </td>
-                    <td><span className="tag tag-neutral">{c.tier}</span></td>
+                    <td><span className="tag tag-violet">{c.tier}</span></td>
                     <td className="text-[13px]">{c.phone ?? "—"}</td>
                     <td className="text-[13px] text-slate-8">{c.address ?? "—"}</td>
                     <td className="text-right text-[13px]">{num(c.points)}</td>

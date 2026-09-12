@@ -81,7 +81,7 @@ export default function BarangClient() {
                       const stock = row?.stock ?? 0;
                       const low = stock < (row?.minStock ?? 0);
                       return (
-                        <td key={s.id} className={clsx("text-right text-[13px]", low && "font-semibold text-brand-600")}>
+                        <td key={s.id} className={clsx("text-right text-[13px]", low && "font-semibold text-amber-700")}>
                           {num(stock)}
                         </td>
                       );

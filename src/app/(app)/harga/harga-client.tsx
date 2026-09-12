@@ -184,7 +184,7 @@ export default function HargaClient() {
                             <div
                               className={clsx(
                                 "mt-1 text-right text-[11px] font-semibold",
-                                margin < 15 ? "text-brand-600" : "text-slate-7"
+                                margin < 15 ? "text-amber-700" : "text-slate-7"
                               )}
                             >
                               margin {margin.toFixed(0)}%
