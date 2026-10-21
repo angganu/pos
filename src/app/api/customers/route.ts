@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, qp, audit } from "@/lib/api";
+import { route, ok, qp, audit, readJson } from "@/lib/api";
 import { requirePerm } from "@/lib/rbac";
 
 export const GET = route(async ({ req }) => {
@@ -44,7 +44,7 @@ const schema = z.object({
 
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "partner.manage");
-  const data = schema.parse(await req.json());
+  const data = schema.parse(await readJson(req));
   const customer = await prisma.customer.create({ data });
   await audit(user.id, "create", "Customer", customer.id, data);
   return ok(serialize(customer), 201);
@@ -54,7 +54,7 @@ const patchSchema = schema.partial().extend({ id: z.number().int(), active: z.bo
 
 export const PATCH = route(async ({ user, req }) => {
   requirePerm(user, "partner.manage");
-  const { id, ...data } = patchSchema.parse(await req.json());
+  const { id, ...data } = patchSchema.parse(await readJson(req));
   const customer = await prisma.customer.update({ where: { id }, data });
   await audit(user.id, "update", "Customer", id, data);
   return ok(serialize(customer));

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma, serialize } from "@/lib/db";
-import { route, ok, audit } from "@/lib/api";
+import { route, ok, audit, readJson } from "@/lib/api";
 import { requirePerm } from "@/lib/rbac";
 
 export const GET = route(async () => {
@@ -21,7 +21,7 @@ const schema = z.object({
 
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "item.manage");
-  const data = schema.parse(await req.json());
+  const data = schema.parse(await readJson(req));
   const category = await prisma.category.create({ data });
   await audit(user.id, "create", "Category", category.id, data);
   return ok(serialize(category), 201);

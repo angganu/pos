@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { Role } from "@prisma/client";
 import { prisma, serialize } from "@/lib/db";
-import { route, ok, audit } from "@/lib/api";
+import { route, ok, audit, readJson } from "@/lib/api";
 import { requirePerm } from "@/lib/rbac";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, createSession, PASSWORD_MAX } from "@/lib/auth";
 
 export const GET = route(async ({ user }) => {
   requirePerm(user, "user.manage");
@@ -26,14 +26,14 @@ export const GET = route(async ({ user }) => {
 const schema = z.object({
   name: z.string().min(1).max(120),
   email: z.string().email(),
-  password: z.string().min(8, "Kata sandi minimal 8 karakter"),
+  password: z.string().min(8, "Kata sandi minimal 8 karakter").max(PASSWORD_MAX),
   role: z.nativeEnum(Role),
   storeId: z.number().int().nullable().default(null),
 });
 
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "user.manage");
-  const body = schema.parse(await req.json());
+  const body = schema.parse(await readJson(req));
 
   if ((body.role === "MANAGER" || body.role === "CASHIER") && !body.storeId) {
     throw new Error("Manajer dan kasir wajib ditugaskan ke satu toko.");
@@ -57,21 +57,24 @@ const patchSchema = z.object({
   role: z.nativeEnum(Role).optional(),
   storeId: z.number().int().nullable().optional(),
   active: z.boolean().optional(),
-  password: z.string().min(8).optional(),
+  password: z.string().min(8).max(PASSWORD_MAX).optional(),
 });
 
 export const PATCH = route(async ({ user, req }) => {
   requirePerm(user, "user.manage");
-  const { id, password, ...rest } = patchSchema.parse(await req.json());
+  const { id, password, ...rest } = patchSchema.parse(await readJson(req));
 
   if (id === user.id && rest.active === false) {
     throw new Error("Anda tidak bisa menonaktifkan akun Anda sendiri.");
   }
 
-  await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id },
     data: { ...rest, ...(password ? { passwordHash: await hashPassword(password) } : {}) },
   });
+
+  // A new password ends every older session; keep the admin who did it signed in.
+  if (password && id === user.id) await createSession(updated);
 
   await audit(user.id, "update", "User", id, rest);
   return ok({ id });

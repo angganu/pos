@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { MovementType, TransferStatus } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, qpInt, audit } from "@/lib/api";
-import { requirePerm, assertStoreAccess } from "@/lib/rbac";
+import { route, ok, qpInt, audit, readJson } from "@/lib/api";
+import { requirePerm, assertStoreAccess, resolveStoreScope } from "@/lib/rbac";
 import { applyMovement, assertStockAvailable, nextSeq } from "@/lib/stock";
 import { docCode } from "@/lib/format";
 
 export const GET = route(async ({ user, req }) => {
   requirePerm(user, "transfer.manage");
-  const storeId = qpInt(req, "storeId");
+  const { storeId } = resolveStoreScope(user, qpInt(req, "storeId"));
 
   const transfers = await prisma.transfer.findMany({
     where: storeId ? { OR: [{ fromStoreId: storeId }, { toStoreId: storeId }] } : {},
@@ -46,7 +46,7 @@ const schema = z.object({
 /** One transfer = TRANSFER_OUT at the source + TRANSFER_IN at the destination. */
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "transfer.manage");
-  const body = schema.parse(await req.json());
+  const body = schema.parse(await readJson(req));
   if (body.fromStoreId === body.toStoreId) throw new Error("Toko asal dan tujuan tidak boleh sama.");
   assertStoreAccess(user, body.fromStoreId);
 

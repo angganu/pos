@@ -1,7 +1,54 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { Prisma } from "@prisma/client";
 import { AuthError, getSession, type SessionUser } from "./auth";
+import { HttpError } from "./errors";
 import { prisma } from "./db";
+
+const GENERIC_ERROR = "Terjadi kesalahan pada server. Silakan coba lagi.";
+
+/** Prisma error codes that are the user's fault, mapped to safe messages. */
+const PRISMA_ERRORS: Record<string, [number, string]> = {
+  P2000: [400, "Isian terlalu panjang."],
+  P2002: [409, "Data dengan kode atau nilai yang sama sudah ada."],
+  P2003: [400, "Data terkait tidak valid atau masih dipakai."],
+  P2025: [404, "Data tidak ditemukan."],
+};
+
+const MAX_JSON_BYTES = 1024 * 1024;
+
+/** req.json() with a size cap — route handlers have no body limit of their own. */
+export async function readJson(req: Request, maxBytes = MAX_JSON_BYTES): Promise<unknown> {
+  const tooLarge = () => new HttpError("Data yang dikirim terlalu besar.", 413);
+  if (Number(req.headers.get("content-length") ?? 0) > maxBytes) throw tooLarge();
+  if (!req.body) throw new HttpError("Format permintaan tidak valid.", 400);
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const c of chunks) {
+    bytes.set(c, offset);
+    offset += c.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new HttpError("Format permintaan tidak valid.", 400);
+  }
+}
 
 export function ok<T>(data: T, init?: number) {
   return NextResponse.json({ ok: true, data }, { status: init ?? 200 });
@@ -34,16 +81,23 @@ export function toErrorResponse(err: unknown) {
       : "Sesi tidak valid.";
     return fail(msg, err.status);
   }
+  if (err instanceof HttpError) return fail(err.message, err.status);
   if (err instanceof ZodError) {
     const first = err.errors[0];
     return fail(`${first?.path.join(".") ?? "input"}: ${first?.message ?? "tidak valid"}`, 422);
   }
-  if (err instanceof Error) {
-    console.error("[api]", err);
+  if (err instanceof Prisma.PrismaClientKnownRequestError && PRISMA_ERRORS[err.code]) {
+    const [status, message] = PRISMA_ERRORS[err.code];
+    return fail(message, status);
+  }
+  // Handlers report business-rule violations with a plain `throw new Error("…")`,
+  // so that message is meant for the user. Anything else (Prisma internals,
+  // TypeError, …) can leak table names, queries or code paths — log it only.
+  if (err instanceof Error && err.constructor === Error) {
     return fail(err.message, 400);
   }
-  console.error("[api] unknown", err);
-  return fail("Terjadi kesalahan tak terduga.", 500);
+  console.error("[api]", err);
+  return fail(GENERIC_ERROR, 500);
 }
 
 export async function audit(

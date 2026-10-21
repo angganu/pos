@@ -114,6 +114,11 @@ const OFFERS: Record<string, Record<string, number>> = {
 };
 
 async function main() {
+  // The seed wipes every table and recreates demo logins with a known password.
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_SEED !== "1") {
+    throw new Error("Refusing to seed in production (set ALLOW_SEED=1 to override).");
+  }
+
   console.log("→ Seeding KASAKU…");
 
   // Wipe in dependency order so the seed is re-runnable.

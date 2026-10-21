@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, qpInt } from "@/lib/api";
+import { route, ok, qpInt, readJson } from "@/lib/api";
 import { resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 
 /** Parked sales — the cart is stored as JSON until a cashier resumes it. */
@@ -32,7 +32,7 @@ const schema = z.object({
 });
 
 export const POST = route(async ({ user, req }) => {
-  const body = schema.parse(await req.json());
+  const body = schema.parse(await readJson(req));
   assertStoreAccess(user, body.storeId);
 
   const held = await prisma.heldSale.create({

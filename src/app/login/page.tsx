@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
 
+// Demo shortcuts are a development aid only: a production login page must not
+// advertise working credentials.
+const SHOW_DEMO = process.env.NODE_ENV !== "production";
+
 const DEMO = [
   { label: "Administrator", email: "admin@satupos.id" },
   { label: "Owner", email: "owner@satupos.id" },
@@ -13,8 +17,8 @@ const DEMO = [
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("kasir@satupos.id");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState(SHOW_DEMO ? "kasir@satupos.id" : "");
+  const [password, setPassword] = useState(SHOW_DEMO ? "password123" : "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -127,25 +131,27 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-8">
-            <div className="label-kicker mb-2">Akun demo · sandi password123</div>
-            <div className="grid grid-cols-2 gap-2">
-              {DEMO.map((d) => (
-                <button
-                  key={d.email}
-                  type="button"
-                  onClick={() => {
-                    setEmail(d.email);
-                    setPassword("password123");
-                  }}
-                  className="bg-white px-3 py-2 text-left text-xs ring-1 ring-divider hover:bg-slate-2"
-                >
-                  <div className="font-semibold">{d.label}</div>
-                  <div className="text-slate-6">{d.email}</div>
-                </button>
-              ))}
+          {SHOW_DEMO && (
+            <div className="mt-8">
+              <div className="label-kicker mb-2">Akun demo · sandi password123</div>
+              <div className="grid grid-cols-2 gap-2">
+                {DEMO.map((d) => (
+                  <button
+                    key={d.email}
+                    type="button"
+                    onClick={() => {
+                      setEmail(d.email);
+                      setPassword("password123");
+                    }}
+                    className="bg-white px-3 py-2 text-left text-xs ring-1 ring-divider hover:bg-slate-2"
+                  >
+                    <div className="font-semibold">{d.label}</div>
+                    <div className="text-slate-6">{d.email}</div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

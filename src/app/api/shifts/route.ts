@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, qpInt, audit } from "@/lib/api";
-import { resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
+import { route, ok, qpInt, audit, readJson } from "@/lib/api";
+import { resolveStoreScope, assertStoreAccess, requirePerm } from "@/lib/rbac";
+import { AuthError } from "@/lib/errors";
 import { nextSeq } from "@/lib/stock";
 import { round2 } from "@/lib/units";
 import { docCode } from "@/lib/format";
@@ -55,7 +56,7 @@ const closeSchema = z.object({
 });
 
 export const POST = route(async ({ user, req }) => {
-  const body = z.union([openSchema, closeSchema]).parse(await req.json());
+  const body = z.union([openSchema, closeSchema]).parse(await readJson(req));
 
   if (body.action === "open") {
     assertStoreAccess(user, body.storeId);
@@ -77,8 +78,14 @@ export const POST = route(async ({ user, req }) => {
   }
 
   // Close: expected cash = opening float + cash sales during the shift.
+  requirePerm(user, "shift.close");
   const shift = await prisma.shift.findUniqueOrThrow({ where: { id: body.shiftId } });
-  if (shift.userId !== user.id) assertStoreAccess(user, shift.storeId);
+  if (shift.closedAt) throw new Error("Shift ini sudah ditutup.");
+  if (shift.userId !== user.id) {
+    // Closing someone else's drawer is a supervisor action.
+    if (user.role === "CASHIER") throw new AuthError("FORBIDDEN:shift", 403);
+    assertStoreAccess(user, shift.storeId);
+  }
 
   const cashSales = await prisma.sale.aggregate({
     where: { shiftId: shift.id, paymentMethod: "CASH", status: "POSTED" },

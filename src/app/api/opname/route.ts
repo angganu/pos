@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MovementType, DocStatus } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, qpInt, audit } from "@/lib/api";
+import { route, ok, qpInt, audit, readJson } from "@/lib/api";
 import { requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { applyMovement, nextSeq } from "@/lib/stock";
 import { round2, round4 } from "@/lib/units";
@@ -57,7 +57,7 @@ const schema = z.object({
 /** Posting an opname writes ADJUSTMENT movements for every discrepancy. */
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "stock.adjust");
-  const body = schema.parse(await req.json());
+  const body = schema.parse(await readJson(req));
   assertStoreAccess(user, body.storeId);
 
   const doc = await prisma.$transaction(async (tx) => {

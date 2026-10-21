@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { MovementType, PaymentMethod } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, fail, qp, qpInt, qpDate, audit } from "@/lib/api";
+import { route, ok, fail, qp, qpInt, qpDate, audit, readJson } from "@/lib/api";
 import { requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { applyMovement, assertStockAvailable, currentCost, nextSeq } from "@/lib/stock";
 import { resolvePrices } from "@/lib/pricing";
 import { round2 } from "@/lib/units";
 
 export const GET = route(async ({ user, req }) => {
-  const { storeId } = resolveStoreScope(user, qpInt(req, "storeId"));
+  const { storeId, pinned } = resolveStoreScope(user, qpInt(req, "storeId"));
   const from = qpDate(req, "from");
   const to = qpDate(req, "to");
   const id = qpInt(req, "id");
@@ -17,8 +17,9 @@ export const GET = route(async ({ user, req }) => {
   const itemId = qpInt(req, "itemId");
 
   if (id) {
-    const sale = await prisma.sale.findUnique({
-      where: { id },
+    // Store-pinned users may only open receipts from their own store.
+    const sale = await prisma.sale.findFirst({
+      where: { id, ...(pinned && storeId ? { storeId } : {}) },
       include: {
         store: true, customer: true, user: { select: { name: true } },
         lines: { include: { item: { include: { baseUnit: true } } } },
@@ -108,8 +109,18 @@ const schema = z.object({
  */
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "sale.create");
-  const body = schema.parse(await req.json());
+  const body = schema.parse(await readJson(req));
   assertStoreAccess(user, body.storeId);
+
+  // Overriding the resolved price is a pricing decision, not a cashier one.
+  if (body.lines.some((l) => l.unitPrice !== undefined)) requirePerm(user, "price.manage");
+
+  if (body.shiftId) {
+    const shift = await prisma.shift.findUnique({ where: { id: body.shiftId } });
+    if (!shift || shift.userId !== user.id || shift.storeId !== body.storeId || shift.closedAt) {
+      throw new Error("Shift tidak valid untuk transaksi ini.");
+    }
+  }
 
   const priceMap = await resolvePrices(
     body.lines.map((l) => l.itemId),
@@ -137,6 +148,7 @@ export const POST = route(async ({ user, req }) => {
       const resolved = priceMap.get(l.itemId);
       const unitPrice = l.unitPrice ?? resolved?.price ?? 0;
       const basePrice = resolved?.basePrice ?? unitPrice;
+      if (l.discount > round2(l.qty * unitPrice)) throw new Error("Diskon tidak boleh melebihi harga barang.");
       const total = round2(l.qty * unitPrice - l.discount);
       const unitCost = await currentCost(tx, l.itemId, body.storeId);
 

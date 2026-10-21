@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, qpInt, audit } from "@/lib/api";
+import { route, ok, qpInt, audit, readJson } from "@/lib/api";
 import { requirePerm, resolveStoreScope } from "@/lib/rbac";
 import { setPrice, clearPrice } from "@/lib/pricing";
 
@@ -70,7 +70,7 @@ const putSchema = z.object({
 
 export const PUT = route(async ({ user, req }) => {
   requirePerm(user, "price.manage");
-  const { itemId, cells } = putSchema.parse(await req.json());
+  const { itemId, cells } = putSchema.parse(await readJson(req));
 
   for (const c of cells) {
     // Managers may only touch their own store's prices.

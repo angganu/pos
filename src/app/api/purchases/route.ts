@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MovementType } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, fail, qp, qpInt, qpDate, audit } from "@/lib/api";
+import { route, ok, fail, qp, qpInt, qpDate, audit, readJson } from "@/lib/api";
 import { requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { applyMovement, nextSeq } from "@/lib/stock";
 import { setPrice } from "@/lib/pricing";
@@ -9,7 +9,7 @@ import { round2, round4, toBaseQty, toBasePrice } from "@/lib/units";
 import { docCode } from "@/lib/format";
 
 export const GET = route(async ({ user, req }) => {
-  const { storeId } = resolveStoreScope(user, qpInt(req, "storeId"));
+  const { storeId, pinned } = resolveStoreScope(user, qpInt(req, "storeId"));
   const from = qpDate(req, "from");
   const to = qpDate(req, "to");
   const id = qpInt(req, "id");
@@ -18,8 +18,9 @@ export const GET = route(async ({ user, req }) => {
   const itemId = qpInt(req, "itemId");
 
   if (id) {
-    const purchase = await prisma.purchase.findUnique({
-      where: { id },
+    // Store-pinned users may only open invoices from their own store.
+    const purchase = await prisma.purchase.findFirst({
+      where: { id, ...(pinned && storeId ? { storeId } : {}) },
       include: {
         store: true, supplier: true, user: { select: { name: true } },
         lines: { include: { item: { include: { baseUnit: true } } } },
@@ -122,7 +123,7 @@ const schema = z.object({
  */
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "purchase.manage");
-  const body = schema.parse(await req.json());
+  const body = schema.parse(await readJson(req));
   assertStoreAccess(user, body.storeId);
 
   const result = await prisma.$transaction(async (tx) => {

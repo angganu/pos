@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, qp, qpInt, audit } from "@/lib/api";
+import { route, ok, qp, qpInt, audit, readJson } from "@/lib/api";
 import { requirePerm, resolveStoreScope } from "@/lib/rbac";
 
 /** GET /api/items?q=&categoryId=&storeId=&lowOnly=1 */
@@ -77,7 +77,7 @@ const createSchema = z.object({
 
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "item.manage");
-  const body = createSchema.parse(await req.json());
+  const body = createSchema.parse(await readJson(req));
 
   const item = await prisma.$transaction(async (tx) => {
     const baseUnit = await tx.unit.findUniqueOrThrow({ where: { id: body.baseUnitId } });

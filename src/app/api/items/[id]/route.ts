@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, fail, audit } from "@/lib/api";
+import { route, ok, fail, audit, readJson } from "@/lib/api";
 import { requirePerm } from "@/lib/rbac";
 
 type Params = { id: string };
@@ -51,7 +51,7 @@ const patchSchema = z.object({
 export const PATCH = route<Params>(async ({ user, req, params }) => {
   requirePerm(user, "item.manage");
   const id = Number(params.id);
-  const body = patchSchema.parse(await req.json());
+  const body = patchSchema.parse(await readJson(req));
 
   await prisma.$transaction(async (tx) => {
     const { units, minStock, ...rest } = body;
