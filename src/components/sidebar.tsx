@@ -7,7 +7,7 @@ import clsx from "clsx";
 import {
   ShoppingCart, Truck, RotateCcw, Package, Tags, Users, Building2, Boxes,
   ArrowLeftRight, BarChart3, GitCompareArrows, FileText, ShieldCheck,
-  ChevronUp, Settings, Monitor, User, LogOut, Receipt, PackageSearch,
+  ChevronUp, Settings, Monitor, User, LogOut, Receipt, PackageSearch, PackageX,
 } from "lucide-react";
 import { useApp } from "./app-context";
 import { can, type Permission } from "@/lib/rbac";
@@ -24,6 +24,7 @@ const GROUPS: NavGroup[] = [
       { href: "/kasir", id: "kasir", label: "Kasir", en: "Sell", icon: ShoppingCart, perm: "sale.create" },
       { href: "/pembelian", id: "beli", label: "Pembelian", en: "Buy", icon: Truck, perm: "purchase.manage" },
       { href: "/retur", id: "retur", label: "Retur", en: "Returns", icon: RotateCcw, perm: "return.manage" },
+      { href: "/reject", id: "reject", label: "Reject Barang", en: "Rejects", icon: PackageX, perm: "reject.manage" },
     ],
   },
   {

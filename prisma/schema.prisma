@@ -23,6 +23,7 @@ enum MovementType {
   TRANSFER_OUT
   ADJUSTMENT
   OPENING
+  REJECT
 }
 
 enum ReturnType {
@@ -72,6 +73,7 @@ model User {
   movements StockMovement[]
   audits    AuditLog[]
   heldSales HeldSale[]
+  rejects   Reject[]
 
   @@index([storeId])
   @@index([role])
@@ -99,6 +101,7 @@ model Store {
   opnames       StockOpname[]
   shifts        Shift[]
   heldSales     HeldSale[]
+  rejects       Reject[]
 }
 
 model Customer {
@@ -132,6 +135,7 @@ model Supplier {
 
   purchases Purchase[]
   returns   ReturnDoc[]
+  rejects   Reject[]
 }
 
 model Category {
@@ -178,6 +182,7 @@ model Item {
   movements  StockMovement[]
   transLines TransferLine[]
   opnLines   OpnameLine[]
+  rejLines   RejectLine[]
 
   @@index([categoryId])
   @@index([name])
@@ -219,14 +224,14 @@ model ItemStock {
 /// Price per item per store. customerId NULL = general (non-member) price.
 /// customerId set = special price dedicated to that member, in that store.
 model ItemPrice {
-  id            Int       @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   itemId        Int
   storeId       Int
   customerId    Int?
-  price         Decimal   @db.Decimal(18, 4)
-  effectiveFrom DateTime  @default(now())
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  price         Decimal  @db.Decimal(18, 4)
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -256,6 +261,7 @@ model Purchase {
   store    Store          @relation(fields: [storeId], references: [id])
   user     User           @relation(fields: [userId], references: [id])
   lines    PurchaseLine[]
+  rejects  Reject[]
 
   @@index([storeId, date])
   @@index([supplierId])
@@ -274,10 +280,57 @@ model PurchaseLine {
   discount     Decimal @default(0) @db.Decimal(18, 2)
   total        Decimal @db.Decimal(18, 2)
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  item     Item     @relation(fields: [itemId], references: [id])
+  purchase    Purchase     @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  item        Item         @relation(fields: [itemId], references: [id])
+  rejectLines RejectLine[]
 
   @@index([purchaseId])
+  @@index([itemId])
+}
+
+/// Goods that arrived with a purchase in bad condition and are written off:
+/// they leave stock for good (not sold, not returned to the supplier).
+/// supplierId is copied from the purchase so supplier quality reports need no join.
+model Reject {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique @db.VarChar(40)
+  purchaseId Int
+  supplierId Int
+  storeId    Int
+  userId     Int
+  date       DateTime @default(now())
+  /// Cost value written off, at what was paid per base unit.
+  total      Decimal  @default(0) @db.Decimal(18, 2)
+  reason     String?  @db.VarChar(255)
+  createdAt  DateTime @default(now())
+
+  purchase Purchase     @relation(fields: [purchaseId], references: [id])
+  supplier Supplier     @relation(fields: [supplierId], references: [id])
+  store    Store        @relation(fields: [storeId], references: [id])
+  user     User         @relation(fields: [userId], references: [id])
+  lines    RejectLine[]
+
+  @@index([storeId, date])
+  @@index([supplierId, date])
+  @@index([purchaseId])
+}
+
+/// One rejected purchase line. qty is in the item's base unit (the stock unit).
+model RejectLine {
+  id             Int     @id @default(autoincrement())
+  rejectId       Int
+  purchaseLineId Int
+  itemId         Int
+  qty            Decimal @db.Decimal(18, 4)
+  unitCost       Decimal @db.Decimal(18, 4)
+  total          Decimal @db.Decimal(18, 2)
+
+  reject       Reject       @relation(fields: [rejectId], references: [id], onDelete: Cascade)
+  purchaseLine PurchaseLine @relation(fields: [purchaseLineId], references: [id])
+  item         Item         @relation(fields: [itemId], references: [id])
+
+  @@index([rejectId])
+  @@index([purchaseLineId])
   @@index([itemId])
 }
 
@@ -435,18 +488,18 @@ model OpnameLine {
 
 /// Kartu stok — every stock change lands here, with the resulting balance.
 model StockMovement {
-  id          Int          @id @default(autoincrement())
-  itemId      Int
-  storeId     Int
-  userId      Int?
-  type        MovementType
-  qty         Decimal      @db.Decimal(18, 4)
-  balanceAfter Decimal     @db.Decimal(18, 4)
-  unitCost    Decimal      @default(0) @db.Decimal(18, 4)
-  refType     String?      @db.VarChar(40)
-  refId       Int?
-  note        String?      @db.VarChar(255)
-  createdAt   DateTime     @default(now())
+  id           Int          @id @default(autoincrement())
+  itemId       Int
+  storeId      Int
+  userId       Int?
+  type         MovementType
+  qty          Decimal      @db.Decimal(18, 4)
+  balanceAfter Decimal      @db.Decimal(18, 4)
+  unitCost     Decimal      @default(0) @db.Decimal(18, 4)
+  refType      String?      @db.VarChar(40)
+  refId        Int?
+  note         String?      @db.VarChar(255)
+  createdAt    DateTime     @default(now())
 
   item  Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)

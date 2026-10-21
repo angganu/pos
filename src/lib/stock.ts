@@ -90,7 +90,7 @@ export async function currentCost(
 /** Next sequential number for a document code within the current month. */
 export async function nextSeq(
   tx: Prisma.TransactionClient,
-  model: "purchase" | "sale" | "returnDoc" | "transfer" | "stockOpname" | "shift"
+  model: "purchase" | "sale" | "returnDoc" | "transfer" | "stockOpname" | "shift" | "reject"
 ): Promise<number> {
   const start = new Date();
   start.setDate(1);

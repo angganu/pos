@@ -124,6 +124,7 @@ async function main() {
   // Wipe in dependency order so the seed is re-runnable.
   await prisma.$transaction([
     prisma.auditLog.deleteMany(), prisma.stockMovement.deleteMany(),
+    prisma.rejectLine.deleteMany(), prisma.reject.deleteMany(),
     prisma.saleLine.deleteMany(), prisma.returnLine.deleteMany(),
     prisma.purchaseLine.deleteMany(), prisma.transferLine.deleteMany(),
     prisma.opnameLine.deleteMany(), prisma.heldSale.deleteMany(),

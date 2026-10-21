@@ -19,14 +19,15 @@ export type Permission =
   | "supplier.compare"
   | "store.all"
   | "user.manage"
-  | "history.view";
+  | "history.view"
+  | "reject.manage";
 
 const MATRIX: Record<Role, Permission[]> = {
   ADMIN: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
     "item.manage", "price.manage", "partner.manage", "stock.view", "stock.adjust",
     "transfer.manage", "report.view", "supplier.compare", "store.all", "user.manage",
-    "history.view",
+    "history.view", "reject.manage",
   ],
   OWNER: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
@@ -40,7 +41,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "report.view",
     "history.view",
   ],
-  CASHIER: ["sale.create", "shift.close", "return.manage", "stock.view", "history.view"],
+  CASHIER: ["sale.create", "shift.close", "return.manage", "stock.view", "history.view", "reject.manage"],
 };
 
 export function can(user: Pick<SessionUser, "role">, perm: Permission): boolean {
@@ -85,6 +86,7 @@ export const NAV_PERMS: Record<string, Permission> = {
   kasir: "sale.create",
   pembelian: "purchase.manage",
   retur: "return.manage",
+  reject: "reject.manage",
   barang: "item.manage",
   harga: "price.manage",
   pelanggan: "partner.manage",
