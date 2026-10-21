@@ -195,7 +195,7 @@ export default function LabaClient() {
               Laba per barang{" "}
               <span className="text-[13px] font-normal text-slate-7">— harga beli, harga jual, dan selisihnya</span>
             </h4>
-            <div className="table-wrap">
+            <div className="table-wrap table-scroll">
               <table className="tbl min-w-[900px]">
                 <thead>
                   <tr>
@@ -239,7 +239,7 @@ export default function LabaClient() {
           <div className="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-6 px-6 pb-10 pt-8">
             <div>
               <h4 className="mb-3 text-base">Member dengan belanja terbanyak</h4>
-              <div className="table-wrap">
+              <div className="table-wrap table-scroll">
                 <table className="tbl min-w-[420px]">
                   <thead>
                     <tr>
@@ -270,7 +270,7 @@ export default function LabaClient() {
 
             <div>
               <h4 className="mb-3 text-base">Barang paling laku</h4>
-              <div className="table-wrap">
+              <div className="table-wrap table-scroll">
                 <table className="tbl min-w-[420px]">
                   <thead>
                     <tr>

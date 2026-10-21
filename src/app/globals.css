@@ -182,6 +182,15 @@
     @apply bg-slate-2/60;
   }
 
+  /* Long tables: cap the height and keep the column titles in view while scrolling. */
+  .table-scroll {
+    @apply max-h-[400px] overflow-y-auto;
+  }
+  .table-scroll .tbl thead th {
+    /* A sticky cell loses its collapsed border, so the underline is drawn as a shadow. */
+    @apply sticky top-0 z-10 border-b-0 bg-bg shadow-[inset_0_-2px_0_var(--color-ink)];
+  }
+
   .panel {
     @apply bg-white ring-1 ring-divider;
   }
@@ -197,5 +206,9 @@
   }
   body {
     background: #fff;
+  }
+  .table-scroll {
+    max-height: none;
+    overflow: visible;
   }
 }
