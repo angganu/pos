@@ -72,7 +72,7 @@ export const GET = route(async ({ user, req }) => {
 });
 
 const schema = z.object({
-  type: z.nativeEnum(ReturnType),
+  type: z.enum(ReturnType),
   storeId: z.number().int(),
   saleId: z.number().int().nullable().default(null),
   supplierId: z.number().int().nullable().default(null),

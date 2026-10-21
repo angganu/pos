@@ -97,7 +97,7 @@ export default function LabaClient() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#d5dde7" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#798898" />
                     <YAxis tick={{ fontSize: 11 }} stroke="#798898" tickFormatter={(v) => `${Math.round(v / 1e6)}jt`} />
-                    <Tooltip formatter={(v: number) => rp(v)} contentStyle={{ fontSize: 12, borderRadius: 0 }} />
+                    <Tooltip formatter={(v) => rp(Number(v ?? 0))} contentStyle={{ fontSize: 12, borderRadius: 0 }} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Bar dataKey="revenue" name="Omzet" fill="#b6c2d0" />
                     <Bar dataKey="profit" name="Laba kotor" fill="#2563eb" />

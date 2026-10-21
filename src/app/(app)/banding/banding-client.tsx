@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import clsx from "clsx";
 import useFetch from "@/components/use-fetch";
 import { PageHeader, Loading, EmptyState, Chip } from "@/components/ui";
@@ -19,16 +19,14 @@ type Comparison = {
 };
 
 export default function BandingClient() {
-  const [itemId, setItemId] = useState<number | null>(null);
+  const [pickedItemId, setItemId] = useState<number | null>(null);
   const { data: items } = useFetch<{ id: number; code: string; name: string }[]>("/api/items");
+  // Until the user picks one, compare the first item.
+  const itemId = pickedItemId ?? items?.[0]?.id ?? null;
   const { data, loading } = useFetch<Comparison>(
     itemId ? `/api/reports/supplier-comparison${qs({ itemId })}` : null,
     [itemId]
   );
-
-  useEffect(() => {
-    if (!itemId && items?.length) setItemId(items[0].id);
-  }, [items, itemId]);
 
   return (
     <div>

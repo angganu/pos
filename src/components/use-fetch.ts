@@ -33,6 +33,9 @@ export default function useFetch<T>(url: string | null, deps: unknown[] = []) {
   }, [url]);
 
   useEffect(() => {
+    // Fetching when the URL changes is the effect's whole job; the loading
+    // flag it raises first is part of that sync, not derived state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, ...deps]);

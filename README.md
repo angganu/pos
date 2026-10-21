@@ -1,6 +1,6 @@
 # KASAKU — Sistem Kasir Multi-Toko
 
-Point-of-sale for a multi-store retail business, built with **Next.js 15 (App Router) · TypeScript · Tailwind CSS v4 · Prisma · MySQL**.
+Point-of-sale for a multi-store retail business, built with **Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Prisma · MySQL**.
 
 Built from the approved UI mockups: same layout, same bilingual copy, same blue/pastel Modernist styling — now backed by a real database.
 
@@ -106,7 +106,7 @@ prisma/
 
 ### API shape
 
-Every endpoint returns `{ ok: true, data }` or `{ ok: false, error }`. Auth is an httpOnly JWT cookie; `src/middleware.ts` is the edge gate and each handler re-checks permissions with `requirePerm()`.
+Every endpoint returns `{ ok: true, data }` or `{ ok: false, error }`. Auth is an httpOnly JWT cookie; `src/proxy.ts` (Next 16's replacement for middleware) is the first gate and each handler re-checks permissions with `requirePerm()`.
 
 | Method | Path | Notes |
 |---|---|---|

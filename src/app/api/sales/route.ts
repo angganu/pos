@@ -84,9 +84,9 @@ const schema = z.object({
   shiftId: z.number().int().nullable().default(null),
   taxEnabled: z.boolean().default(true),
   taxRate: z.number().min(0).max(100).default(11),
-  paymentMethod: z.nativeEnum(PaymentMethod).default("CASH"),
+  paymentMethod: z.enum(PaymentMethod).default("CASH"),
   paid: z.number().min(0).default(0),
-  paymentMeta: z.record(z.any()).optional().nullable(),
+  paymentMeta: z.record(z.string(), z.any()).optional().nullable(),
   lines: z
     .array(
       z.object({

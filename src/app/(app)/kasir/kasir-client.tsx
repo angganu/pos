@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Barcode, Minus, Plus, X, Search, Pause, RotateCcw } from "lucide-react";
+import { Barcode, Minus, Plus, X, Pause } from "lucide-react";
 import clsx from "clsx";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
@@ -36,7 +36,7 @@ async function postSale(body: unknown) {
 const TAX_RATE = 11;
 
 export default function KasirClient() {
-  const { user, storeId, store, stores } = useApp();
+  const { user, storeId, stores } = useApp();
   const effectiveStoreId = storeId ?? user.storeId ?? stores[0]?.id ?? null;
 
   const [cart, setCart] = useState<CartLine[]>([]);

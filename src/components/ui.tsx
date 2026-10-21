@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
@@ -166,6 +166,7 @@ export function SearchSelect({
   const [active, setActive] = useState(0);
   const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listId = useId();
 
   const selected = options.find((o) => o.value === value) ?? null;
 
@@ -205,10 +206,6 @@ export function SearchSelect({
       window.removeEventListener("resize", onScroll);
     };
   }, [open]);
-
-  useEffect(() => {
-    setActive(0);
-  }, [query]);
 
   function commit(opt: ComboOption) {
     if (opt.disabled) return;
@@ -251,6 +248,7 @@ export function SearchSelect({
         type="text"
         role="combobox"
         aria-expanded={open}
+        aria-controls={listId}
         aria-autocomplete="list"
         aria-label={ariaLabel}
         autoComplete="off"
@@ -262,6 +260,7 @@ export function SearchSelect({
         onClick={openList}
         onChange={(e) => {
           setQuery(e.target.value);
+          setActive(0);
           if (!open) setOpen(true);
         }}
         onKeyDown={onKeyDown}
@@ -272,6 +271,7 @@ export function SearchSelect({
         rect &&
         createPortal(
           <ul
+            id={listId}
             role="listbox"
             style={{ position: "fixed", top: rect.top, left: rect.left, width: rect.width, zIndex: 9999 }}
             className="max-h-56 overflow-y-auto bg-white py-1 text-sm shadow-2xl ring-1 ring-divider"

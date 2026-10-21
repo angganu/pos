@@ -12,11 +12,11 @@ const EXTRA_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
   .filter(Boolean);
 
 /**
- * Edge guard: bounces unauthenticated traffic before it reaches a page or an
- * API route. Per-route permission checks still happen server-side in each
- * handler — this is only the first gate.
+ * Proxy (Next 16's name for middleware): bounces unauthenticated traffic
+ * before it reaches a page or an API route. Per-route permission checks still
+ * happen server-side in each handler — this is only the first gate.
  */
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // CSRF defence in depth on top of the SameSite cookie: a write must come

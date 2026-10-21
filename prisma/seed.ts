@@ -240,7 +240,7 @@ async function main() {
   // Purchase history — establishes real HPP for every item.
   let pSeq = 0;
   for (const [supCode, offers] of Object.entries(OFFERS)) {
-    for (const [storeCode, storeId] of stores) {
+    for (const [, storeId] of stores) {
       pSeq += 1;
       const lines = Object.entries(offers).map(([itemCode, unitPrice]) => {
         const seed = ITEMS.find((i) => i.code === itemCode)!;

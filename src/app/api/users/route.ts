@@ -25,9 +25,9 @@ export const GET = route(async ({ user }) => {
 
 const schema = z.object({
   name: z.string().min(1).max(120),
-  email: z.string().email(),
+  email: z.email(),
   password: z.string().min(8, "Kata sandi minimal 8 karakter").max(PASSWORD_MAX),
-  role: z.nativeEnum(Role),
+  role: z.enum(Role),
   storeId: z.number().int().nullable().default(null),
 });
 
@@ -54,7 +54,7 @@ export const POST = route(async ({ user, req }) => {
 const patchSchema = z.object({
   id: z.number().int(),
   name: z.string().min(1).max(120).optional(),
-  role: z.nativeEnum(Role).optional(),
+  role: z.enum(Role).optional(),
   storeId: z.number().int().nullable().optional(),
   active: z.boolean().optional(),
   password: z.string().min(8).max(PASSWORD_MAX).optional(),

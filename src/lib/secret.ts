@@ -1,6 +1,5 @@
 /**
- * Session constants shared by the edge middleware and the server.
- * Kept free of Node-only imports so the middleware can use it too.
+ * Session constants shared by the proxy (src/proxy.ts) and the server.
  */
 export const SESSION_COOKIE = "pos_session";
 export const JWT_ALG = "HS256";

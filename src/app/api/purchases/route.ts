@@ -5,7 +5,7 @@ import { route, ok, fail, qp, qpInt, qpDate, audit, readJson } from "@/lib/api";
 import { requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { applyMovement, nextSeq } from "@/lib/stock";
 import { setPrice } from "@/lib/pricing";
-import { round2, round4, toBaseQty, toBasePrice } from "@/lib/units";
+import { round2, toBaseQty, toBasePrice } from "@/lib/units";
 import { docCode } from "@/lib/format";
 
 export const GET = route(async ({ user, req }) => {

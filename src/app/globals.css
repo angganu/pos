@@ -51,8 +51,8 @@
   --color-slate-8: #414d5b;
   --color-slate-9: #2a3440;
 
-  --font-heading: Archivo, ui-sans-serif, system-ui, sans-serif;
-  --font-body: Archivo, ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
 
   --radius-none: 0px;
 }

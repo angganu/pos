@@ -5,7 +5,7 @@ import { ok, fail, toErrorResponse, audit, readJson } from "@/lib/api";
 import { createLimiter, clientIp } from "@/lib/rate-limit";
 
 const schema = z.object({
-  email: z.string().email("Email tidak valid").max(191),
+  email: z.email("Email tidak valid").max(191),
   password: z.string().min(1, "Kata sandi wajib diisi").max(PASSWORD_MAX),
 });
 

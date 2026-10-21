@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Archivo } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,17 +12,12 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+// Downloaded at build time and served from this app: no request to Google at runtime.
+const archivo = Archivo({ subsets: ["latin"], variable: "--font-archivo", display: "swap" });
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="id" className={archivo.variable}>
       <body>{children}</body>
     </html>
   );

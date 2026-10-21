@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import useFetch from "@/components/use-fetch";
@@ -19,19 +19,21 @@ export default function HargaClient() {
   const params = useSearchParams();
   const initialItem = params.get("itemId");
 
-  const [itemId, setItemId] = useState<number | null>(initialItem ? Number(initialItem) : null);
+  const [pickedItemId, setItemId] = useState<number | null>(initialItem ? Number(initialItem) : null);
   const [edits, setEdits] = useState<Record<string, number | null>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const { data: items } = useFetch<{ id: number; code: string; name: string }[]>("/api/items");
+  // Until the user picks one, edit the first item.
+  const itemId = pickedItemId ?? items?.[0]?.id ?? null;
   const { data, loading, refresh } = useFetch<Matrix>(itemId ? `/api/prices${qs({ itemId })}` : null, [itemId]);
 
-  useEffect(() => {
-    if (!itemId && items?.length) setItemId(items[0].id);
-  }, [items, itemId]);
-
-  useEffect(() => setEdits({}), [itemId]);
+  function pickItem(id: number) {
+    // Unsaved edits belong to the item they were typed for.
+    if (id !== itemId) setEdits({});
+    setItemId(id);
+  }
 
   const key = (storeId: number, customerId: number | null) => `${storeId}|${customerId ?? "null"}`;
 
@@ -92,7 +94,7 @@ export default function HargaClient() {
           {(items ?? []).map((i) => (
             <button
               key={i.id}
-              onClick={() => setItemId(i.id)}
+              onClick={() => pickItem(i.id)}
               className={clsx(
                 "border-b border-divider px-4 py-2.5 text-left text-[13px] font-semibold transition-colors",
                 itemId === i.id ? "bg-ink text-white" : "hover:bg-slate-2"

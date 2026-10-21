@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, StatCard, Loading, ErrorBox, SearchSelect } from "@/components/ui";
-import { api, qs } from "@/lib/client";
-import { rp, num, initials } from "@/lib/format";
+import { PageHeader, StatCard, Loading, SearchSelect } from "@/components/ui";
+import { api } from "@/lib/client";
+import { rp, num } from "@/lib/format";
 
 type ItemRow = {
   id: number; code: string; name: string;
@@ -25,17 +25,15 @@ export default function PembelianClient() {
   const { data: suppliers } = useFetch<Supplier[]>("/api/suppliers");
   const { data: customers } = useFetch<{ id: number; code: string; name: string; tier: string }[]>("/api/customers");
 
-  const [supplierId, setSupplierId] = useState<number | null>(null);
+  const [pickedSupplierId, setSupplierId] = useState<number | null>(null);
+  // Until the user picks one, buy from the first supplier.
+  const supplierId = pickedSupplierId ?? suppliers?.[0]?.id ?? null;
   const [lines, setLines] = useState<Line[]>([]);
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
   const [newPrices, setNewPrices] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
-
-  useEffect(() => {
-    if (!supplierId && suppliers?.length) setSupplierId(suppliers[0].id);
-  }, [suppliers, supplierId]);
 
   const itemMap = useMemo(() => new Map((items ?? []).map((i) => [i.id, i])), [items]);
   const supplier = suppliers?.find((s) => s.id === supplierId) ?? null;

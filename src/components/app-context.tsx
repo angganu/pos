@@ -34,12 +34,16 @@ export function AppProvider({
   const [storeId, setStoreIdState] = useState<number | null>(initial);
   const [navOpen, setNavOpen] = useState(true);
 
+  // Saved preferences live in localStorage, which the server cannot read, so
+  // they are applied after hydration rather than in the initial render.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const saved = window.localStorage.getItem("pos.storeId");
     if (saved && canPickAllStores) setStoreIdState(saved === "all" ? null : Number(saved));
     const nav = window.localStorage.getItem("pos.navOpen");
     if (nav !== null) setNavOpen(nav === "1");
   }, [canPickAllStores]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const setStoreId = useCallback((id: number | null) => {
     setStoreIdState(id);

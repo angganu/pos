@@ -83,7 +83,7 @@ export function toErrorResponse(err: unknown) {
   }
   if (err instanceof HttpError) return fail(err.message, err.status);
   if (err instanceof ZodError) {
-    const first = err.errors[0];
+    const first = err.issues[0];
     return fail(`${first?.path.join(".") ?? "input"}: ${first?.message ?? "tidak valid"}`, 422);
   }
   if (err instanceof Prisma.PrismaClientKnownRequestError && PRISMA_ERRORS[err.code]) {
