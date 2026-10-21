@@ -12,10 +12,10 @@ import { qs } from "@/lib/client";
 import { rp, num, pct, fdate } from "@/lib/format";
 
 type Profit = {
-  kpi: { revenue: number; cogs: number; profit: number; margin: number; txCount: number; avgTicket: number; qtySold: number };
-  stores: { storeId: number; code: string; name: string; revenue: number; cogs: number; profit: number; margin: number }[];
+  kpi: { revenue: number; cogs: number; reject: number; profit: number; margin: number; txCount: number; avgTicket: number; qtySold: number };
+  stores: { storeId: number; code: string; name: string; revenue: number; cogs: number; reject: number; profit: number; margin: number }[];
   items: { itemId: number; name: string; code: string; unit: string; qty: number; revenue: number; cogs: number; profit: number; margin: number; avgSellPrice: number; avgBuyPrice: number }[];
-  periods: { key: string; label: string; revenue: number; cogs: number; profit: number }[];
+  periods: { key: string; label: string; revenue: number; cogs: number; reject: number; profit: number }[];
 };
 
 type Members = {
@@ -96,7 +96,12 @@ export default function LabaClient() {
               hint={`${num(data?.kpi.txCount ?? 0)} struk · rata-rata ${rp(data?.kpi.avgTicket ?? 0)}`}
             />
             <StatCard label="Harga beli (HPP)" value={rp(data?.kpi.cogs ?? 0)} hint={`${num(data?.kpi.qtySold ?? 0)} unit terjual`} />
-            <StatCard emphasis label="Laba kotor" value={rp(data?.kpi.profit ?? 0)} hint="omzet dikurangi harga beli" />
+            <StatCard
+              emphasis
+              label="Laba"
+              value={rp(data?.kpi.profit ?? 0)}
+              hint={`omzet − harga beli − reject ${rp(data?.kpi.reject ?? 0)}`}
+            />
             <StatCard
               label="Margin rata-rata"
               value={`${((data?.kpi.margin ?? 0) * 100).toFixed(0)}%`}
@@ -132,10 +137,10 @@ export default function LabaClient() {
                       <span className="text-base font-extrabold">{rp(s.profit)}</span>
                     </div>
                     <div className="h-3.5 bg-slate-2">
-                      <div className="h-3.5 bg-brand-600" style={{ width: `${(s.profit / maxProfit) * 100}%` }} />
+                      <div className="h-3.5 bg-brand-600" style={{ width: `${Math.max(0, (s.profit / maxProfit) * 100)}%` }} />
                     </div>
                     <div className="mt-1.5 flex justify-between text-[11px] text-slate-7">
-                      <span>omzet {rp(s.revenue)} · HPP {rp(s.cogs)}</span>
+                      <span>omzet {rp(s.revenue)} · HPP {rp(s.cogs)} · reject {rp(s.reject)}</span>
                       <span>margin {(s.margin * 100).toFixed(0)}%</span>
                     </div>
                   </div>

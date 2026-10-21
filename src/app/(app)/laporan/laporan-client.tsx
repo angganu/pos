@@ -9,7 +9,7 @@ import { qs } from "@/lib/client";
 const REPORTS = [
   { id: "sales-daily", name: "Penjualan harian", desc: "Omzet, jumlah struk, rata-rata per struk — per toko per hari", period: "Harian", api: "/api/sales" },
   { id: "sales-item", name: "Penjualan per barang", desc: "Qty terjual, omzet, laba kotor per barang", period: "Bulanan", api: "/api/reports/profit" },
-  { id: "profit-store", name: "Laba per toko", desc: "Omzet – HPP, margin, tren periode", period: "Bulanan", api: "/api/reports/profit" },
+  { id: "profit-store", name: "Laba per toko", desc: "Omzet – HPP – reject, margin, tren periode", period: "Bulanan", api: "/api/reports/profit" },
   { id: "stock-card", name: "Kartu stok", desc: "Mutasi masuk/keluar tiap barang per toko", period: "Sesuai filter", api: "/api/stock?card=1" },
   { id: "purchase-supplier", name: "Pembelian per supplier", desc: "Nilai pembelian, harga rata-rata, jatuh tempo", period: "Bulanan", api: "/api/purchases" },
   { id: "member-spend", name: "Belanja member", desc: "Peringkat member, total belanja, poin", period: "Bulanan", api: "/api/reports/top-members" },

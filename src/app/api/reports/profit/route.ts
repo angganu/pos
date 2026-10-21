@@ -10,8 +10,10 @@ import { round2 } from "@/lib/units";
  *   - profit per PERIOD (monthly trend)
  *   - KPI headline figures
  *
- * COGS is read from the snapshot taken when each sale was posted, so later
- * price changes never rewrite history.
+ * profit = revenue - COGS - reject. COGS is read from the snapshot taken when
+ * each sale was posted, so later price changes never rewrite history. Rejects
+ * are goods written off at their purchase cost, counted in the period (and
+ * store) they were rejected in.
  */
 export const GET = route(async ({ user, req }) => {
   requirePerm(user, "report.view");
@@ -34,7 +36,7 @@ export const GET = route(async ({ user, req }) => {
     ...(storeId ? { storeId } : {}),
   };
 
-  const [sales, stores] = await Promise.all([
+  const [sales, stores, rejects] = await Promise.all([
     prisma.sale.findMany({
       where,
       include: {
@@ -47,6 +49,10 @@ export const GET = route(async ({ user, req }) => {
       where: { active: true, ...(storeId ? { id: storeId } : {}) },
       orderBy: { code: "asc" },
     }),
+    prisma.reject.findMany({
+      where: { date: { gte: from, lte: to }, ...(storeId ? { storeId } : {}) },
+      select: { storeId: true, date: true, total: true },
+    }),
   ]);
 
   // ---- KPI ----
@@ -58,23 +64,29 @@ export const GET = route(async ({ user, req }) => {
     cogs += dec(s.cogs);
     for (const l of s.lines) qtySold += dec(l.qty);
   }
-  const profit = round2(revenue - cogs);
+  const reject = rejects.reduce((a, r) => a + dec(r.total), 0);
+  const profit = round2(revenue - cogs - reject);
 
   // ---- per store ----
-  const byStore = new Map<number, { revenue: number; cogs: number; tx: number }>();
+  const byStore = new Map<number, { revenue: number; cogs: number; reject: number; tx: number }>();
   for (const s of sales) {
-    const cur = byStore.get(s.storeId) ?? { revenue: 0, cogs: 0, tx: 0 };
+    const cur = byStore.get(s.storeId) ?? { revenue: 0, cogs: 0, reject: 0, tx: 0 };
     cur.revenue += dec(s.subtotal) - dec(s.discount);
     cur.cogs += dec(s.cogs);
     cur.tx += 1;
     byStore.set(s.storeId, cur);
   }
+  for (const r of rejects) {
+    const cur = byStore.get(r.storeId) ?? { revenue: 0, cogs: 0, reject: 0, tx: 0 };
+    cur.reject += dec(r.total);
+    byStore.set(r.storeId, cur);
+  }
   const storeRows = stores.map((st) => {
-    const v = byStore.get(st.id) ?? { revenue: 0, cogs: 0, tx: 0 };
-    const p = round2(v.revenue - v.cogs);
+    const v = byStore.get(st.id) ?? { revenue: 0, cogs: 0, reject: 0, tx: 0 };
+    const p = round2(v.revenue - v.cogs - v.reject);
     return {
       storeId: st.id, code: st.code, name: st.name,
-      revenue: round2(v.revenue), cogs: round2(v.cogs), profit: p,
+      revenue: round2(v.revenue), cogs: round2(v.cogs), reject: round2(v.reject), profit: p,
       margin: v.revenue ? p / v.revenue : 0, txCount: v.tx,
     };
   });
@@ -107,12 +119,19 @@ export const GET = route(async ({ user, req }) => {
     .sort((a, b) => b.profit - a.profit);
 
   // ---- per period (month) ----
-  const byMonth = new Map<string, { revenue: number; cogs: number }>();
+  const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const byMonth = new Map<string, { revenue: number; cogs: number; reject: number }>();
   for (const s of sales) {
-    const key = `${s.date.getFullYear()}-${String(s.date.getMonth() + 1).padStart(2, "0")}`;
-    const cur = byMonth.get(key) ?? { revenue: 0, cogs: 0 };
+    const key = monthKey(s.date);
+    const cur = byMonth.get(key) ?? { revenue: 0, cogs: 0, reject: 0 };
     cur.revenue += dec(s.subtotal) - dec(s.discount);
     cur.cogs += dec(s.cogs);
+    byMonth.set(key, cur);
+  }
+  for (const r of rejects) {
+    const key = monthKey(r.date);
+    const cur = byMonth.get(key) ?? { revenue: 0, cogs: 0, reject: 0 };
+    cur.reject += dec(r.total);
     byMonth.set(key, cur);
   }
   const MONTH_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -122,8 +141,8 @@ export const GET = route(async ({ user, req }) => {
       const [y, m] = key.split("-");
       return {
         key, label: `${MONTH_ID[Number(m) - 1]} ${y.slice(2)}`,
-        revenue: round2(v.revenue), cogs: round2(v.cogs),
-        profit: round2(v.revenue - v.cogs),
+        revenue: round2(v.revenue), cogs: round2(v.cogs), reject: round2(v.reject),
+        profit: round2(v.revenue - v.cogs - v.reject),
       };
     });
 
@@ -131,7 +150,7 @@ export const GET = route(async ({ user, req }) => {
     serialize({
       range: { from, to },
       kpi: {
-        revenue: round2(revenue), cogs: round2(cogs), profit,
+        revenue: round2(revenue), cogs: round2(cogs), reject: round2(reject), profit,
         margin: revenue ? profit / revenue : 0,
         txCount: sales.length,
         avgTicket: sales.length ? round2(revenue / sales.length) : 0,
