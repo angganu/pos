@@ -6,7 +6,7 @@ import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
 import { PageHeader, Loading, EmptyState, SearchSelect } from "@/components/ui";
 import { api, qs } from "@/lib/client";
-import { rp, num, pct, fdatetime } from "@/lib/format";
+import { rp, num, fdatetime } from "@/lib/format";
 
 type PurchaseLookup = {
   id: number; code: string; date: string; store: string; supplier: string;
@@ -28,19 +28,7 @@ type Mode = "buy" | "base";
 
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
-type SupplierRow = {
-  supplierId: number; code: string; name: string;
-  purchaseCount: number; purchaseValue: number;
-  rejectCount: number; rejectValue: number; rejectRate: number;
-};
-
 const REASONS = ["Rusak saat diterima", "Kadaluarsa", "Busuk / basi", "Pecah / bocor", "Cacat produksi"];
-
-function rateTag(rate: number) {
-  if (rate < 0.02) return "tag-teal";
-  if (rate < 0.05) return "tag-amber";
-  return "tag-accent";
-}
 
 export default function RejectClient() {
   // null = all stores (owners/admins); store-pinned roles are scoped by the server anyway.
@@ -60,10 +48,6 @@ export default function RejectClient() {
     [query, storeId]
   );
   const { data: history, refresh: refreshHistory } = useFetch<RejectRow[]>(`/api/rejects${qs({ storeId })}`, [storeId]);
-  const { data: suppliers, refresh: refreshSuppliers } = useFetch<SupplierRow[]>(
-    `/api/rejects${qs({ summary: 1, storeId })}`,
-    [storeId]
-  );
 
   const loss = useMemo(() => {
     if (!purchase) return 0;
@@ -96,7 +80,6 @@ export default function RejectClient() {
       setQuery(null);
       setCode("");
       refreshHistory();
-      refreshSuppliers();
     } catch (err) {
       setMsg({ kind: "err", text: err instanceof Error ? err.message : "Gagal menyimpan reject." });
     } finally {
@@ -301,47 +284,6 @@ export default function RejectClient() {
             </tbody>
           </table>
           {(history?.length ?? 0) === 0 && <EmptyState title="Belum ada reject tercatat." />}
-        </div>
-      </div>
-
-      <div className="px-6 pb-10">
-        <h4 className="mb-1 text-base">Kualitas supplier</h4>
-        <p className="mb-2.5 text-[13px] text-slate-7">
-          Nilai barang reject dibanding nilai pembelian. Makin kecil rasionya, makin baik suppliernya.
-        </p>
-        <div className="table-wrap">
-          <table className="tbl min-w-[760px]">
-            <thead>
-              <tr>
-                <th className="w-[50px]">#</th>
-                <th>Supplier</th>
-                <th className="w-[90px] text-right">Faktur</th>
-                <th className="w-[150px] text-right">Nilai beli</th>
-                <th className="w-[90px] text-right">Reject</th>
-                <th className="w-[150px] text-right">Nilai reject</th>
-                <th className="w-[110px] text-right">Rasio</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(suppliers ?? []).map((s, i) => (
-                <tr key={s.supplierId}>
-                  <td className="text-[13px] text-slate-7">{i + 1}</td>
-                  <td>
-                    <div className="text-sm font-semibold">{s.name}</div>
-                    <div className="text-[11px] text-slate-7">{s.code}</div>
-                  </td>
-                  <td className="text-right text-sm">{num(s.purchaseCount)}</td>
-                  <td className="text-right text-sm">{rp(s.purchaseValue)}</td>
-                  <td className="text-right text-sm">{num(s.rejectCount)}</td>
-                  <td className="text-right text-sm">{rp(s.rejectValue)}</td>
-                  <td className="text-right">
-                    <span className={clsx("tag", rateTag(s.rejectRate))}>{pct(s.rejectRate, 1)}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {(suppliers?.length ?? 0) === 0 && <EmptyState title="Belum ada pembelian dari supplier." />}
         </div>
       </div>
     </div>

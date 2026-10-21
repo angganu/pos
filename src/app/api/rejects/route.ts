@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MovementType } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, fail, qp, qpInt, audit, readJson } from "@/lib/api";
+import { route, ok, fail, qp, qpInt, qpDate, audit, readJson } from "@/lib/api";
 import { requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { applyMovement, assertStockAvailable, nextSeq } from "@/lib/stock";
 import { round2, round4 } from "@/lib/units";
@@ -14,15 +14,61 @@ function netUnitCost(line: { total: unknown; baseQty: unknown }) {
 }
 
 /**
+ * GET /api/rejects?summary=1&from=&to=      -> reject rate per supplier (lowest = best quality)
  * GET /api/rejects?purchaseCode=PB-2610-0001 -> an invoice's lines, with how much can still be rejected
- * GET /api/rejects?summary=1                 -> reject rate per supplier (lowest = best quality)
  * GET /api/rejects                           -> reject history
  */
 export const GET = route(async ({ user, req }) => {
-  requirePerm(user, "reject.manage");
+  // The supplier summary is a read-only report on the Laporan page; everything else serves the reject screen.
+  const summary = qp(req).get("summary") === "1";
+  requirePerm(user, summary ? "report.view" : "reject.manage");
   const { storeId } = resolveStoreScope(user, qpInt(req, "storeId"));
   const storeWhere = storeId ? { storeId } : {};
   const purchaseCode = qp(req).get("purchaseCode")?.trim();
+
+  if (summary) {
+    const from = qpDate(req, "from");
+    const to = qpDate(req, "to");
+    const dateWhere = from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {};
+
+    const [bought, rejected, suppliers] = await Promise.all([
+      prisma.purchase.groupBy({
+        by: ["supplierId"],
+        where: { status: "POSTED", ...storeWhere, ...dateWhere },
+        _sum: { subtotal: true },
+        _count: { _all: true },
+      }),
+      // Rejects are dated by the invoice they came from, so the rate always compares
+      // goods bought in the range against the part of those same goods that was rejected.
+      prisma.reject.groupBy({
+        by: ["supplierId"],
+        where: { ...storeWhere, ...(from || to ? { purchase: dateWhere } : {}) },
+        _sum: { total: true },
+        _count: { _all: true },
+      }),
+      prisma.supplier.findMany({ select: { id: true, code: true, name: true } }),
+    ]);
+
+    const supplierOf = new Map(suppliers.map((s) => [s.id, s]));
+    const rejectOf = new Map(rejected.map((r) => [r.supplierId, r]));
+
+    // Rate by value, not quantity: quantities mix units (Kg, Pcs, Liter) and can't be summed.
+    const rows = bought.map((b) => {
+      const r = rejectOf.get(b.supplierId);
+      const purchaseValue = round2(dec(b._sum.subtotal ?? 0));
+      const rejectValue = round2(dec(r?._sum.total ?? 0));
+      return {
+        supplierId: b.supplierId,
+        code: supplierOf.get(b.supplierId)?.code ?? "—",
+        name: supplierOf.get(b.supplierId)?.name ?? "—",
+        purchaseCount: b._count._all, purchaseValue,
+        rejectCount: r?._count._all ?? 0, rejectValue,
+        rejectRate: purchaseValue ? rejectValue / purchaseValue : 0,
+      };
+    });
+    rows.sort((a, b) => a.rejectRate - b.rejectRate || b.purchaseValue - a.purchaseValue);
+    return ok(serialize(rows));
+  }
 
   if (purchaseCode) {
     const purchase = await prisma.purchase.findFirst({
@@ -63,44 +109,6 @@ export const GET = route(async ({ user, req }) => {
         }),
       })
     );
-  }
-
-  if (qp(req).get("summary") === "1") {
-    const [bought, rejected, suppliers] = await Promise.all([
-      prisma.purchase.groupBy({
-        by: ["supplierId"],
-        where: { status: "POSTED", ...storeWhere },
-        _sum: { subtotal: true },
-        _count: { _all: true },
-      }),
-      prisma.reject.groupBy({
-        by: ["supplierId"],
-        where: storeWhere,
-        _sum: { total: true },
-        _count: { _all: true },
-      }),
-      prisma.supplier.findMany({ select: { id: true, code: true, name: true } }),
-    ]);
-
-    const supplierOf = new Map(suppliers.map((s) => [s.id, s]));
-    const rejectOf = new Map(rejected.map((r) => [r.supplierId, r]));
-
-    // Rate by value, not quantity: quantities mix units (Kg, Pcs, Liter) and can't be summed.
-    const rows = bought.map((b) => {
-      const r = rejectOf.get(b.supplierId);
-      const purchaseValue = round2(dec(b._sum.subtotal ?? 0));
-      const rejectValue = round2(dec(r?._sum.total ?? 0));
-      return {
-        supplierId: b.supplierId,
-        code: supplierOf.get(b.supplierId)?.code ?? "—",
-        name: supplierOf.get(b.supplierId)?.name ?? "—",
-        purchaseCount: b._count._all, purchaseValue,
-        rejectCount: r?._count._all ?? 0, rejectValue,
-        rejectRate: purchaseValue ? rejectValue / purchaseValue : 0,
-      };
-    });
-    rows.sort((a, b) => a.rejectRate - b.rejectRate || b.purchaseValue - a.purchaseValue);
-    return ok(serialize(rows));
   }
 
   const rejects = await prisma.reject.findMany({
