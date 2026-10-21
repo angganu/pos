@@ -1,25 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import clsx from "clsx";
 import { Download, Eye } from "lucide-react";
 import { useApp } from "@/components/app-context";
-import useFetch from "@/components/use-fetch";
-import { PageHeader, Loading, EmptyState } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 import { qs } from "@/lib/client";
-import { rp, num, pct } from "@/lib/format";
-
-type SupplierRow = {
-  supplierId: number; code: string; name: string;
-  purchaseCount: number; purchaseValue: number;
-  rejectCount: number; rejectValue: number; rejectRate: number;
-};
-
-function rateTag(rate: number) {
-  if (rate < 0.02) return "tag-teal";
-  if (rate < 0.05) return "tag-amber";
-  return "tag-accent";
-}
 
 const REPORTS = [
   { id: "sales-daily", name: "Penjualan harian", desc: "Omzet, jumlah struk, rata-rata per struk — per toko per hari", period: "Harian", api: "/api/sales" },
@@ -53,11 +38,6 @@ export default function LaporanClient() {
   const [to, setTo] = useState(today);
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ name: string; rows: Record<string, unknown>[] } | null>(null);
-
-  const { data: suppliers, loading: suppliersLoading, error: suppliersError } = useFetch<SupplierRow[]>(
-    `/api/rejects${qs({ summary: 1, storeId, from, to })}`,
-    [storeId, from, to]
-  );
 
   async function run(report: (typeof REPORTS)[number], download: boolean) {
     setBusy(report.id);
@@ -118,7 +98,7 @@ export default function LaporanClient() {
         </div>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 px-6 pb-8 pt-5">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 px-6 pb-10 pt-5">
         {REPORTS.map((r) => (
           <div key={r.id} className="flex flex-col gap-2 bg-white p-4 ring-1 ring-divider">
             <div className="label-kicker">{r.period}</div>
@@ -134,54 +114,6 @@ export default function LaporanClient() {
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="px-6 pb-10">
-        <h4 className="mb-1 text-base">Kualitas supplier</h4>
-        <p className="mb-2.5 text-[13px] text-slate-7">
-          Nilai barang reject dibanding nilai pembelian pada rentang tanggal di atas. Makin kecil rasionya, makin baik suppliernya.
-        </p>
-        {suppliersError && (
-          <div className="mb-2.5 bg-brand-100 px-4 py-3 text-sm font-semibold text-brand-800">{suppliersError}</div>
-        )}
-        {suppliersLoading && !suppliers ? (
-          <Loading label="Memuat kualitas supplier…" />
-        ) : (
-          <div className="table-wrap">
-            <table className="tbl min-w-[760px]">
-              <thead>
-                <tr>
-                  <th className="w-[50px]">#</th>
-                  <th>Supplier</th>
-                  <th className="w-[90px] text-right">Faktur</th>
-                  <th className="w-[150px] text-right">Nilai beli</th>
-                  <th className="w-[90px] text-right">Reject</th>
-                  <th className="w-[150px] text-right">Nilai reject</th>
-                  <th className="w-[110px] text-right">Rasio</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(suppliers ?? []).map((s, i) => (
-                  <tr key={s.supplierId}>
-                    <td className="text-[13px] text-slate-7">{i + 1}</td>
-                    <td>
-                      <div className="text-sm font-semibold">{s.name}</div>
-                      <div className="text-[11px] text-slate-7">{s.code}</div>
-                    </td>
-                    <td className="text-right text-sm">{num(s.purchaseCount)}</td>
-                    <td className="text-right text-sm">{rp(s.purchaseValue)}</td>
-                    <td className="text-right text-sm">{num(s.rejectCount)}</td>
-                    <td className="text-right text-sm">{rp(s.rejectValue)}</td>
-                    <td className="text-right">
-                      <span className={clsx("tag", rateTag(s.rejectRate))}>{pct(s.rejectRate, 1)}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {(suppliers?.length ?? 0) === 0 && <EmptyState title="Tidak ada pembelian dari supplier pada rentang ini." />}
-          </div>
-        )}
       </div>
 
       {preview && (

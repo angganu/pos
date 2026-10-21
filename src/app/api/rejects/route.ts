@@ -19,7 +19,7 @@ function netUnitCost(line: { total: unknown; baseQty: unknown }) {
  * GET /api/rejects                           -> reject history
  */
 export const GET = route(async ({ user, req }) => {
-  // The supplier summary is a read-only report on the Laporan page; everything else serves the reject screen.
+  // The supplier summary is a read-only report on the profit dashboard; everything else serves the reject screen.
   const summary = qp(req).get("summary") === "1";
   requirePerm(user, summary ? "report.view" : "reject.manage");
   const { storeId } = resolveStoreScope(user, qpInt(req, "storeId"));

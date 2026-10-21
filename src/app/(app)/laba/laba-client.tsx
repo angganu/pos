@@ -7,9 +7,9 @@ import {
 import clsx from "clsx";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, StatCard, Loading } from "@/components/ui";
+import { PageHeader, StatCard, Loading, EmptyState } from "@/components/ui";
 import { qs } from "@/lib/client";
-import { rp, num, fdate } from "@/lib/format";
+import { rp, num, pct, fdate } from "@/lib/format";
 
 type Profit = {
   kpi: { revenue: number; cogs: number; profit: number; margin: number; txCount: number; avgTicket: number; qtySold: number };
@@ -22,6 +22,18 @@ type Members = {
   members: { rank: number; code: string; name: string; tier: string; txCount: number; totalSpend: number; avgSpend: number; lastPurchase: string | null }[];
   topItems: { rank: number; name: string; code: string; unit: string; qty: number; revenue: number }[];
 };
+
+type SupplierRow = {
+  supplierId: number; code: string; name: string;
+  purchaseCount: number; purchaseValue: number;
+  rejectCount: number; rejectValue: number; rejectRate: number;
+};
+
+function rateTag(rate: number) {
+  if (rate < 0.02) return "tag-teal";
+  if (rate < 0.05) return "tag-amber";
+  return "tag-accent";
+}
 
 const RANGES = [
   { id: "30", label: "30 hari", months: 0, days: 30 },
@@ -44,6 +56,10 @@ export default function LabaClient() {
 
   const { data, loading } = useFetch<Profit>(`/api/reports/profit${qs({ storeId, from })}`, [storeId, range]);
   const { data: members } = useFetch<Members>(`/api/reports/top-members${qs({ storeId, from })}`, [storeId, range]);
+  const { data: suppliers, error: suppliersError } = useFetch<SupplierRow[]>(
+    `/api/rejects${qs({ summary: 1, storeId, from })}`,
+    [storeId, range]
+  );
 
   const maxProfit = Math.max(1, ...(data?.stores ?? []).map((s) => s.profit));
   const maxItemProfit = Math.max(1, ...(data?.items ?? []).map((i) => i.profit));
@@ -125,6 +141,52 @@ export default function LabaClient() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+
+          <div className="px-6 pt-8">
+            <h4 className="mb-3 text-base">
+              Kualitas supplier{" "}
+              <span className="text-[13px] font-normal text-slate-7">
+                — nilai reject dibanding nilai pembelian, makin kecil makin baik
+              </span>
+            </h4>
+            {suppliersError && (
+              <div className="mb-3 bg-brand-100 px-4 py-3 text-sm font-semibold text-brand-800">{suppliersError}</div>
+            )}
+            <div className="table-wrap">
+              <table className="tbl min-w-[760px]">
+                <thead>
+                  <tr>
+                    <th className="w-[40px]">#</th>
+                    <th>Supplier</th>
+                    <th className="w-[90px] text-right">Faktur</th>
+                    <th className="w-[150px] text-right">Nilai beli</th>
+                    <th className="w-[90px] text-right">Reject</th>
+                    <th className="w-[150px] text-right">Nilai reject</th>
+                    <th className="w-[110px] text-right">Rasio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(suppliers ?? []).map((s, i) => (
+                    <tr key={s.supplierId}>
+                      <td className="text-[13px] text-slate-6">{i + 1}</td>
+                      <td>
+                        <div className="text-sm font-semibold">{s.name}</div>
+                        <div className="text-[11px] text-slate-7">{s.code}</div>
+                      </td>
+                      <td className="text-right text-[13px]">{num(s.purchaseCount)}</td>
+                      <td className="text-right text-[13px]">{rp(s.purchaseValue)}</td>
+                      <td className="text-right text-[13px]">{num(s.rejectCount)}</td>
+                      <td className="text-right text-sm font-semibold">{rp(s.rejectValue)}</td>
+                      <td className="text-right">
+                        <span className={clsx("tag", rateTag(s.rejectRate))}>{pct(s.rejectRate, 1)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {suppliers?.length === 0 && <EmptyState title="Tidak ada pembelian dari supplier pada periode ini." />}
             </div>
           </div>
 
