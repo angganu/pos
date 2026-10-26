@@ -23,6 +23,7 @@ const PERMS: [string, number, number, number, number][] = [
   ["Transaksi penjualan (kasir)", 1, 1, 1, 1],
   ["Tutup kasir & rekap uang", 1, 1, 1, 1],
   ["Retur & refund", 1, 1, 1, 1],
+  ["Pengiriman & surat jalan", 1, 1, 1, 1],
   ["Transaksi pembelian", 1, 1, 1, 0],
   ["Void / batal transaksi", 1, 1, 1, 0],
   ["Ubah harga jual", 1, 1, 2, 0],
@@ -30,6 +31,7 @@ const PERMS: [string, number, number, number, number][] = [
   ["Transfer & opname stok", 1, 1, 2, 0],
   ["Lihat laba & laporan", 1, 1, 2, 0],
   ["Kelola barang & kategori", 1, 1, 0, 0],
+  ["Kelola master kendaraan", 1, 1, 0, 0],
   ["Akses semua toko", 1, 1, 0, 0],
   ["Kelola pengguna & peran", 1, 0, 0, 0],
 ];

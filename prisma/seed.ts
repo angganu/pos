@@ -124,6 +124,7 @@ async function main() {
   // Wipe in dependency order so the seed is re-runnable.
   await prisma.$transaction([
     prisma.auditLog.deleteMany(), prisma.stockMovement.deleteMany(),
+    prisma.deliveryNote.deleteMany(), prisma.delivery.deleteMany(),
     prisma.rejectLine.deleteMany(), prisma.reject.deleteMany(),
     prisma.saleLine.deleteMany(), prisma.returnLine.deleteMany(),
     prisma.purchaseLine.deleteMany(), prisma.transferLine.deleteMany(),
@@ -330,6 +331,8 @@ async function main() {
             date, subtotal, discount: 0, tax, total, cogs,
             paid: total, change: 0, paymentMethod: "CASH",
             pointsEarned: Math.round(total / 1000),
+            // This month's receipts are left waiting for the pengiriman screen.
+            isDelivered: monthsAgo > 0,
             lines: { create: lines },
           },
         });

@@ -63,17 +63,18 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  store     Store?          @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  sales     Sale[]
-  purchases Purchase[]
-  returns   ReturnDoc[]
-  transfers Transfer[]
-  opnames   StockOpname[]
-  shifts    Shift[]
-  movements StockMovement[]
-  audits    AuditLog[]
-  heldSales HeldSale[]
-  rejects   Reject[]
+  store      Store?          @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  sales      Sale[]
+  purchases  Purchase[]
+  returns    ReturnDoc[]
+  transfers  Transfer[]
+  opnames    StockOpname[]
+  shifts     Shift[]
+  movements  StockMovement[]
+  audits     AuditLog[]
+  heldSales  HeldSale[]
+  rejects    Reject[]
+  deliveries Delivery[]
 
   @@index([storeId])
   @@index([role])
@@ -102,6 +103,7 @@ model Store {
   shifts        Shift[]
   heldSales     HeldSale[]
   rejects       Reject[]
+  deliveries    Delivery[]
 }
 
 model Customer {
@@ -116,9 +118,10 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  prices    ItemPrice[]
-  sales     Sale[]
-  heldSales HeldSale[]
+  prices        ItemPrice[]
+  sales         Sale[]
+  heldSales     HeldSale[]
+  deliveryNotes DeliveryNote[]
 }
 
 model Supplier {
@@ -136,6 +139,26 @@ model Supplier {
   purchases Purchase[]
   returns   ReturnDoc[]
   rejects   Reject[]
+}
+
+/// Master kendaraan — the delivery fleet. Columns keep the snake_case names
+/// they were specified with; capacities are in kg.
+model Vehicle {
+  id               Int       @id @default(autoincrement())
+  vehicleNo        String    @unique @map("vehicle_no") @db.VarChar(20)
+  vehicleType      String    @map("vehicle_type") @db.VarChar(60)
+  driver           String?   @db.VarChar(120)
+  driverAssistance String?   @map("driver_assistance") @db.VarChar(120)
+  minCapacity      Decimal?  @map("min_capacity") @db.Decimal(18, 2)
+  maxCapacity      Decimal?  @map("max_capacity") @db.Decimal(18, 2)
+  dueTax           DateTime? @map("due_tax") @db.Date
+  dueStnk          DateTime? @map("due_stnk") @db.Date
+  dueKir           DateTime? @map("due_kir") @db.Date
+  active           Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  deliveries Delivery[]
 }
 
 model Category {
@@ -335,36 +358,83 @@ model RejectLine {
 }
 
 model Sale {
-  id            Int           @id @default(autoincrement())
-  code          String        @unique @db.VarChar(40)
-  storeId       Int
-  customerId    Int?
-  userId        Int
-  shiftId       Int?
-  date          DateTime      @default(now())
-  subtotal      Decimal       @default(0) @db.Decimal(18, 2)
-  discount      Decimal       @default(0) @db.Decimal(18, 2)
-  tax           Decimal       @default(0) @db.Decimal(18, 2)
-  total         Decimal       @default(0) @db.Decimal(18, 2)
-  cogs          Decimal       @default(0) @db.Decimal(18, 2)
-  paid          Decimal       @default(0) @db.Decimal(18, 2)
-  change        Decimal       @default(0) @db.Decimal(18, 2)
-  paymentMethod PaymentMethod @default(CASH)
-  paymentMeta   Json?
-  pointsEarned  Int           @default(0)
-  status        DocStatus     @default(POSTED)
-  createdAt     DateTime      @default(now())
+  id             Int           @id @default(autoincrement())
+  code           String        @unique @db.VarChar(40)
+  storeId        Int
+  customerId     Int?
+  userId         Int
+  shiftId        Int?
+  date           DateTime      @default(now())
+  subtotal       Decimal       @default(0) @db.Decimal(18, 2)
+  discount       Decimal       @default(0) @db.Decimal(18, 2)
+  tax            Decimal       @default(0) @db.Decimal(18, 2)
+  total          Decimal       @default(0) @db.Decimal(18, 2)
+  cogs           Decimal       @default(0) @db.Decimal(18, 2)
+  paid           Decimal       @default(0) @db.Decimal(18, 2)
+  change         Decimal       @default(0) @db.Decimal(18, 2)
+  paymentMethod  PaymentMethod @default(CASH)
+  paymentMeta    Json?
+  pointsEarned   Int           @default(0)
+  status         DocStatus     @default(POSTED)
+  /// Goods have left the store. Set by a delivery (pengiriman), cleared if it is cancelled.
+  isDelivered    Boolean       @default(false) @map("is_delivered")
+  /// The surat jalan that carried this sale.
+  deliveryNoteId Int?
+  createdAt      DateTime      @default(now())
 
-  store    Store       @relation(fields: [storeId], references: [id])
-  customer Customer?   @relation(fields: [customerId], references: [id])
-  user     User        @relation(fields: [userId], references: [id])
-  shift    Shift?      @relation(fields: [shiftId], references: [id])
-  lines    SaleLine[]
-  returns  ReturnDoc[]
+  store        Store         @relation(fields: [storeId], references: [id])
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  shift        Shift?        @relation(fields: [shiftId], references: [id])
+  deliveryNote DeliveryNote? @relation(fields: [deliveryNoteId], references: [id], onDelete: SetNull)
+  lines        SaleLine[]
+  returns      ReturnDoc[]
 
   @@index([storeId, date])
   @@index([customerId])
   @@index([shiftId])
+  @@index([storeId, isDelivered])
+  @@index([deliveryNoteId])
+}
+
+/// Pengiriman — one vehicle trip taking paid sales to their customers.
+/// Driver names are copied from the vehicle when the trip is made, so a later
+/// change in the vehicle master doesn't rewrite who drove it.
+model Delivery {
+  id               Int      @id @default(autoincrement())
+  code             String   @unique @db.VarChar(40)
+  storeId          Int
+  vehicleId        Int
+  userId           Int
+  date             DateTime @db.Date
+  driver           String?  @db.VarChar(120)
+  driverAssistance String?  @db.VarChar(120)
+  note             String?  @db.VarChar(255)
+  createdAt        DateTime @default(now())
+
+  store   Store          @relation(fields: [storeId], references: [id])
+  vehicle Vehicle        @relation(fields: [vehicleId], references: [id])
+  user    User           @relation(fields: [userId], references: [id])
+  notes   DeliveryNote[]
+
+  @@index([storeId, date])
+  @@index([vehicleId])
+}
+
+/// Surat jalan — one per customer on a delivery; its items are that customer's
+/// sales merged per item. A walk-in sale (no customer) gets a surat jalan of its own.
+model DeliveryNote {
+  id         Int    @id @default(autoincrement())
+  code       String @unique @db.VarChar(40)
+  deliveryId Int
+  customerId Int?
+
+  delivery Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id])
+  sales    Sale[]
+
+  @@index([deliveryId])
+  @@index([customerId])
 }
 
 model SaleLine {

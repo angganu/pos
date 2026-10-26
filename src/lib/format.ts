@@ -43,6 +43,11 @@ export function fdate(d: Date | string | null | undefined): string {
   if (!d) return "—";
   return DATE.format(new Date(d));
 }
+/** A DATE column (no time of day), shown as that same day whatever the browser's time zone. */
+export function fday(d: string | null | undefined): string {
+  if (!d) return "—";
+  return DATE.format(new Date(`${d.slice(0, 10)}T00:00:00`));
+}
 export function fdatetime(d: Date | string | null | undefined): string {
   if (!d) return "—";
   return DATETIME.format(new Date(d));

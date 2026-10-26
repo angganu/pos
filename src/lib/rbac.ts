@@ -20,28 +20,33 @@ export type Permission =
   | "store.all"
   | "user.manage"
   | "history.view"
-  | "reject.manage";
+  | "reject.manage"
+  | "vehicle.manage"
+  | "delivery.manage";
 
 const MATRIX: Record<Role, Permission[]> = {
   ADMIN: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
     "item.manage", "price.manage", "partner.manage", "stock.view", "stock.adjust",
     "transfer.manage", "report.view", "supplier.compare", "store.all", "user.manage",
-    "history.view", "reject.manage",
+    "history.view", "reject.manage", "vehicle.manage", "delivery.manage",
   ],
   OWNER: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
     "item.manage", "price.manage", "partner.manage", "stock.view", "stock.adjust",
     "transfer.manage", "report.view", "supplier.compare", "store.all",
-    "history.view",
+    "history.view", "vehicle.manage", "delivery.manage",
   ],
   MANAGER: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
     "price.manage", "partner.manage", "stock.view", "stock.adjust", "transfer.manage",
     "report.view",
-    "history.view",
+    "history.view", "delivery.manage",
   ],
-  CASHIER: ["sale.create", "shift.close", "return.manage", "stock.view", "history.view", "reject.manage"],
+  CASHIER: [
+    "sale.create", "shift.close", "return.manage", "stock.view", "history.view", "reject.manage",
+    "delivery.manage",
+  ],
 };
 
 export function can(user: Pick<SessionUser, "role">, perm: Permission): boolean {
@@ -87,10 +92,12 @@ export const NAV_PERMS: Record<string, Permission> = {
   pembelian: "purchase.manage",
   retur: "return.manage",
   reject: "reject.manage",
+  pengiriman: "delivery.manage",
   barang: "item.manage",
   harga: "price.manage",
   pelanggan: "partner.manage",
   supplier: "store.all",
+  kendaraan: "vehicle.manage",
   stok: "stock.view",
   opname: "transfer.manage",
   laba: "store.all",

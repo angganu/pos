@@ -7,7 +7,7 @@ import clsx from "clsx";
 import {
   ShoppingCart, Truck, RotateCcw, Package, Tags, Users, Building2, Boxes,
   ArrowLeftRight, BarChart3, GitCompareArrows, FileText, ShieldCheck,
-  ChevronUp, Settings, Monitor, User, LogOut, Receipt, PackageSearch, PackageX,
+  ChevronUp, Settings, Monitor, User, LogOut, Receipt, PackageSearch, PackageX, CarFront, Route,
 } from "lucide-react";
 import { useApp } from "./app-context";
 import { can, type Permission } from "@/lib/rbac";
@@ -25,6 +25,7 @@ const GROUPS: NavGroup[] = [
       { href: "/pembelian", id: "beli", label: "Pembelian", en: "Buy", icon: Truck, perm: "purchase.manage" },
       { href: "/retur", id: "retur", label: "Retur", en: "Returns", icon: RotateCcw, perm: "return.manage" },
       { href: "/reject", id: "reject", label: "Reject Barang", en: "Rejects", icon: PackageX, perm: "reject.manage" },
+      { href: "/pengiriman", id: "pengiriman", label: "Pengiriman", en: "Delivery", icon: Route, perm: "delivery.manage" },
     ],
   },
   {
@@ -34,6 +35,7 @@ const GROUPS: NavGroup[] = [
       { href: "/harga", id: "harga", label: "Matriks Harga", en: "Prices", icon: Tags, perm: "price.manage" },
       { href: "/pelanggan", id: "pelanggan", label: "Pelanggan", en: "Members", icon: Users, perm: "partner.manage" },
       { href: "/supplier", id: "supplier", label: "Supplier", en: "Vendors", icon: Building2, perm: "store.all" },
+      { href: "/kendaraan", id: "kendaraan", label: "Master Kendaraan", en: "Vehicles", icon: CarFront, perm: "vehicle.manage" },
     ],
   },
   {
