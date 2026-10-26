@@ -4,9 +4,7 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 const STORES = [
-  { code: "TK-01", name: "Toko Pusat Malioboro", address: "Jl. Malioboro 128, Yogyakarta", phone: "0274 512 001" },
-  { code: "TK-02", name: "Cabang Godean", address: "Jl. Godean KM 5, Sleman", phone: "0274 798 220" },
-  { code: "TK-03", name: "Cabang Bantul", address: "Jl. Bantul 45, Bantul", phone: "0274 367 118" },
+  { code: "TK-01", name: "Gudang Lembang", address: "Jl. Punclut", phone: "081234567890" },
 ];
 
 const UNITS = [
@@ -38,10 +36,10 @@ const CUSTOMERS = [
 ];
 
 const SUPPLIERS = [
-  { code: "SP-01", name: "CV Sumber Pangan", address: "Jl. Imogiri Timur 12, Bantul", phone: "0274 441 220", pic: "Bpk. Slamet", terms: "Tempo 14 hari" },
-  { code: "SP-02", name: "UD Tani Makmur", address: "Pasar Beringharjo Blok C, Yogyakarta", phone: "0812 2788 410", pic: "Bu Mursidah", terms: "Tunai" },
-  { code: "SP-03", name: "PT Aneka Sembako", address: "Jl. Ring Road Utara 9, Sleman", phone: "0274 885 300", pic: "Bpk. Wijaya", terms: "Tempo 30 hari" },
-  { code: "SP-04", name: "Koperasi Petani Sleman", address: "Jl. Kaliurang KM 12, Sleman", phone: "0813 2900 771", pic: "Bpk. Harjono", terms: "Tunai" },
+  { code: "SP-01", name: "Pasar Induk Lembang", address: "Jl. Imogiri Timur 12, Bantul", phone: "0274 441 220", pic: "Bpk. Slamet", terms: "Tunai" },
+  { code: "SP-02", name: "Pasar Ciroyom", address: "Pasar Beringharjo Blok C, Yogyakarta", phone: "0812 2788 410", pic: "Bu Mursidah", terms: "Tunai" },
+  { code: "SP-03", name: "Supplier Sayur 1", address: "Jl. Ring Road Utara 9, Sleman", phone: "0274 885 300", pic: "Bpk. Wijaya", terms: "Tempo 30 hari" },
+  { code: "SP-04", name: "Supplier Sayur 2", address: "Jl. Kaliurang KM 12, Sleman", phone: "0813 2900 771", pic: "Bpk. Harjono", terms: "Tempo 14 hari" },
 ];
 
 type ItemSeed = {
@@ -57,52 +55,52 @@ type ItemSeed = {
 const ITEMS: ItemSeed[] = [
   { code: "BR-001", barcode: "8990001000011", name: "Beras Pandan Wangi", cat: "CAT-01", base: "GR",
     buyUnit: { label: "Sak 25 Kg", unit: "SAK", factor: 25000 }, cost: 10,
-    price: { "TK-01": 14, "TK-02": 13, "TK-03": 14 }, member: { "MB-003": 12, "MB-002": 13 },
-    stock: { "TK-01": 148000, "TK-02": 96000, "TK-03": 38000 }, min: 40000 },
+    price: { "TK-01": 14 }, member: { "MB-003": 12, "MB-002": 13 },
+    stock: { "TK-01": 148000 }, min: 40000 },
   { code: "GL-001", barcode: "8990001000028", name: "Gula Pasir Kristal", cat: "CAT-01", base: "GR",
     buyUnit: { label: "Karung 50 Kg", unit: "SAK", factor: 50000 }, cost: 13,
-    price: { "TK-01": 17, "TK-02": 16, "TK-03": 17 }, member: { "MB-003": 15 },
-    stock: { "TK-01": 84000, "TK-02": 61000, "TK-03": 22000 }, min: 25000 },
+    price: { "TK-01": 17 }, member: { "MB-003": 15 },
+    stock: { "TK-01": 84000 }, min: 25000 },
   { code: "TP-001", barcode: "8990001000035", name: "Tepung Terigu Serbaguna", cat: "CAT-01", base: "GR",
     buyUnit: { label: "Sak 25 Kg", unit: "SAK", factor: 25000 }, cost: 9,
-    price: { "TK-01": 13, "TK-02": 12, "TK-03": 13 }, member: { "MB-003": 11, "MB-004": 11 },
-    stock: { "TK-01": 52000, "TK-02": 30000, "TK-03": 17000 }, min: 20000 },
+    price: { "TK-01": 13 }, member: { "MB-003": 11, "MB-004": 11 },
+    stock: { "TK-01": 52000 }, min: 20000 },
   { code: "MG-001", barcode: "8990001000042", name: "Minyak Goreng 1 Liter", cat: "CAT-02", base: "PCS",
     buyUnit: { label: "Karton 12 Pcs", unit: "KRT", factor: 12 }, cost: 18200,
-    price: { "TK-01": 21000, "TK-02": 20500, "TK-03": 21500 }, member: { "MB-003": 19500, "MB-004": 20000 },
-    stock: { "TK-01": 186, "TK-02": 92, "TK-03": 41 }, min: 48 },
+    price: { "TK-01": 21000 }, member: { "MB-003": 19500, "MB-004": 20000 },
+    stock: { "TK-01": 186 }, min: 48 },
   { code: "CB-001", barcode: "8990001000059", name: "Cabai Merah Keriting", cat: "CAT-03", base: "GR",
     buyUnit: { label: "Kg", unit: "KG", factor: 1000 }, cost: 34,
-    price: { "TK-01": 48, "TK-02": 45, "TK-03": 50 }, member: { "MB-004": 44 },
-    stock: { "TK-01": 12500, "TK-02": 8200, "TK-03": 3100 }, min: 5000 },
+    price: { "TK-01": 48 }, member: { "MB-004": 44 },
+    stock: { "TK-01": 12500 }, min: 5000 },
   { code: "BW-001", barcode: "8990001000066", name: "Bawang Merah Brebes", cat: "CAT-03", base: "GR",
     buyUnit: { label: "Kg", unit: "KG", factor: 1000 }, cost: 27,
-    price: { "TK-01": 38, "TK-02": 36, "TK-03": 39 }, member: { "MB-004": 34 },
-    stock: { "TK-01": 16400, "TK-02": 9800, "TK-03": 4200 }, min: 6000 },
+    price: { "TK-01": 38 }, member: { "MB-004": 34 },
+    stock: { "TK-01": 16400 }, min: 6000 },
   { code: "TL-001", barcode: "8990001000073", name: "Telur Ayam Negeri", cat: "CAT-04", base: "GR",
     buyUnit: { label: "Peti 15 Kg", unit: "PETI", factor: 15000 }, cost: 25,
-    price: { "TK-01": 32, "TK-02": 30, "TK-03": 32 }, member: { "MB-003": 29 },
-    stock: { "TK-01": 44000, "TK-02": 28000, "TK-03": 9000 }, min: 12000 },
+    price: { "TK-01": 32 }, member: { "MB-003": 29 },
+    stock: { "TK-01": 44000 }, min: 12000 },
   { code: "SS-001", barcode: "8990001000080", name: "Susu UHT Full Cream 1L", cat: "CAT-04", base: "PCS",
     buyUnit: { label: "Karton 12 Pcs", unit: "KRT", factor: 12 }, cost: 16800,
-    price: { "TK-01": 19500, "TK-02": 19000, "TK-03": 20000 }, member: { "MB-002": 18500 },
-    stock: { "TK-01": 96, "TK-02": 54, "TK-03": 28 }, min: 36 },
+    price: { "TK-01": 19500 }, member: { "MB-002": 18500 },
+    stock: { "TK-01": 96 }, min: 36 },
   { code: "AQ-001", barcode: "8990001000097", name: "Air Mineral 600 ml", cat: "CAT-05", base: "PCS",
     buyUnit: { label: "Karton 24 Pcs", unit: "KRT", factor: 24 }, cost: 2600,
-    price: { "TK-01": 3500, "TK-02": 3300, "TK-03": 3600 }, member: { "MB-003": 3000 },
-    stock: { "TK-01": 420, "TK-02": 288, "TK-03": 96 }, min: 120 },
+    price: { "TK-01": 3500 }, member: { "MB-003": 3000 },
+    stock: { "TK-01": 420 }, min: 120 },
   { code: "KP-001", barcode: "8990001000103", name: "Kopi Bubuk Robusta 250 g", cat: "CAT-05", base: "PCS",
     buyUnit: { label: "Karton 20 Pcs", unit: "KRT", factor: 20 }, cost: 20500,
-    price: { "TK-01": 24000, "TK-02": 23500, "TK-03": 24500 }, member: { "MB-002": 22500 },
-    stock: { "TK-01": 74, "TK-02": 38, "TK-03": 12 }, min: 24 },
+    price: { "TK-01": 24000 }, member: { "MB-002": 22500 },
+    stock: { "TK-01": 74 }, min: 24 },
   { code: "ML-001", barcode: "8990001000110", name: "Mie Instan Goreng", cat: "CAT-06", base: "PCS",
     buyUnit: { label: "Karton 40 Pcs", unit: "KRT", factor: 40 }, cost: 2900,
-    price: { "TK-01": 3400, "TK-02": 3300, "TK-03": 3500 }, member: { "MB-003": 3000 },
-    stock: { "TK-01": 640, "TK-02": 400, "TK-03": 118 }, min: 200 },
+    price: { "TK-01": 3400 }, member: { "MB-003": 3000 },
+    stock: { "TK-01": 640 }, min: 200 },
   { code: "SB-001", barcode: "8990001000127", name: "Sabun Cuci Cair 800 ml", cat: "CAT-07", base: "PCS",
     buyUnit: { label: "Karton 12 Pcs", unit: "KRT", factor: 12 }, cost: 15200,
-    price: { "TK-01": 17500, "TK-02": 17000, "TK-03": 18000 }, member: { "MB-001": 16800 },
-    stock: { "TK-01": 58, "TK-02": 34, "TK-03": 16 }, min: 24 },
+    price: { "TK-01": 17500 }, member: { "MB-001": 16800 },
+    stock: { "TK-01": 58 }, min: 24 },
 ];
 
 /** Which suppliers quote which items, priced per THEIR purchase unit. */
@@ -175,9 +173,7 @@ async function main() {
     { name: "Rina Kusuma", email: "admin@satupos.id", role: Role.ADMIN, storeCode: null },
     { name: "H. Bambang S.", email: "owner@satupos.id", role: Role.OWNER, storeCode: null },
     { name: "Dwi Prasetyo", email: "manajer@satupos.id", role: Role.MANAGER, storeCode: "TK-01" },
-    { name: "Sri Handayani", email: "manajer2@satupos.id", role: Role.MANAGER, storeCode: "TK-02" },
     { name: "Yanti Rahayu", email: "kasir@satupos.id", role: Role.CASHIER, storeCode: "TK-01" },
-    { name: "Bagus Nugroho", email: "kasir3@satupos.id", role: Role.CASHIER, storeCode: "TK-03" },
   ];
   const userIds = new Map<string, number>();
   for (const u of users) {
@@ -271,72 +267,68 @@ async function main() {
   }
 
   // Sales history across six months, so the profit dashboard has a real trend.
-  const SOLD: Record<string, number[]> = {
-    "BR-001": [420000, 260000, 110000], "GL-001": [180000, 96000, 42000],
-    "TP-001": [120000, 70000, 30000], "MG-001": [640, 310, 120],
-    "CB-001": [38000, 21000, 9000], "BW-001": [42000, 24000, 10000],
-    "TL-001": [210000, 120000, 44000], "SS-001": [320, 180, 70],
-    "AQ-001": [2100, 1250, 480], "KP-001": [190, 95, 36],
-    "ML-001": [3400, 1900, 700], "SB-001": [145, 82, 30],
+  const SOLD: Record<string, number> = {
+    "BR-001": 420000, "GL-001": 180000,
+    "TP-001": 120000, "MG-001": 640,
+    "CB-001": 38000, "BW-001": 42000,
+    "TL-001": 210000, "SS-001": 320,
+    "AQ-001": 2100, "KP-001": 190,
+    "ML-001": 3400, "SB-001": 145,
   };
-  const storeCodes = ["TK-01", "TK-02", "TK-03"];
+  const storeCode = "TK-01";
+  const storeId = stores.get(storeCode)!;
   const memberCodes = [null, "MB-001", "MB-002", "MB-003", "MB-004"];
 
   let sSeq = 0;
   for (let monthsAgo = 5; monthsAgo >= 0; monthsAgo--) {
-    for (let si = 0; si < storeCodes.length; si++) {
-      const storeCode = storeCodes[si];
-      const storeId = stores.get(storeCode)!;
-      // a handful of representative receipts per store per month
-      for (let n = 0; n < 6; n++) {
-        sSeq += 1;
-        const memberCode = memberCodes[(sSeq + n) % memberCodes.length];
-        const customerId = memberCode ? customers.get(memberCode)! : null;
-        const date = new Date();
-        date.setMonth(date.getMonth() - monthsAgo);
-        date.setDate(3 + n * 4);
-        date.setHours(9 + n, 15, 0, 0);
+    // a handful of representative receipts per month
+    for (let n = 0; n < 6; n++) {
+      sSeq += 1;
+      const memberCode = memberCodes[(sSeq + n) % memberCodes.length];
+      const customerId = memberCode ? customers.get(memberCode)! : null;
+      const date = new Date();
+      date.setMonth(date.getMonth() - monthsAgo);
+      date.setDate(3 + n * 4);
+      date.setHours(9 + n, 15, 0, 0);
 
-        const picks = ITEMS.filter((_, i) => (i + n + si) % 4 === 0).slice(0, 3);
-        if (picks.length === 0) continue;
+      const picks = ITEMS.filter((_, i) => (i + n) % 4 === 0).slice(0, 3);
+      if (picks.length === 0) continue;
 
-        const lines = [];
-        let subtotal = 0;
-        let cogs = 0;
-        for (const seed of picks) {
-          const share = (SOLD[seed.code][si] ?? 0) / 6 / 6;
-          const q = Math.max(1, Math.round(share));
-          const generalPrice = seed.price[storeCode] ?? 0;
-          const memberBase = memberCode ? seed.member[memberCode] : undefined;
-          const delta = generalPrice - (seed.price["TK-01"] ?? 0);
-          const unitPrice = memberBase !== undefined ? Math.max(0, memberBase + delta) : generalPrice;
+      const lines = [];
+      let subtotal = 0;
+      let cogs = 0;
+      for (const seed of picks) {
+        const share = (SOLD[seed.code] ?? 0) / 6 / 6;
+        const q = Math.max(1, Math.round(share));
+        const generalPrice = seed.price[storeCode] ?? 0;
+        const memberBase = memberCode ? seed.member[memberCode] : undefined;
+        const unitPrice = memberBase ?? generalPrice;
 
-          const total = q * unitPrice;
-          subtotal += total;
-          cogs += q * seed.cost;
-          lines.push({
-            itemId: items.get(seed.code)!, qty: q, unitPrice,
-            basePrice: generalPrice, unitCost: seed.cost, discount: 0, total,
-            isMember: memberBase !== undefined,
-          });
-        }
-
-        const tax = Math.round(subtotal * 0.11);
-        const total = subtotal + tax;
-        await prisma.sale.create({
-          data: {
-            code: `TRX-${String(sSeq).padStart(6, "0")}`,
-            storeId, customerId,
-            userId: userIds.get(si === 2 ? "kasir3@satupos.id" : "kasir@satupos.id")!,
-            date, subtotal, discount: 0, tax, total, cogs,
-            paid: total, change: 0, paymentMethod: "CASH",
-            pointsEarned: Math.round(total / 1000),
-            // This month's receipts are left waiting for the pengiriman screen.
-            isDelivered: monthsAgo > 0,
-            lines: { create: lines },
-          },
+        const total = q * unitPrice;
+        subtotal += total;
+        cogs += q * seed.cost;
+        lines.push({
+          itemId: items.get(seed.code)!, qty: q, unitPrice,
+          basePrice: generalPrice, unitCost: seed.cost, discount: 0, total,
+          isMember: memberBase !== undefined,
         });
       }
+
+      const tax = Math.round(subtotal * 0.11);
+      const total = subtotal + tax;
+      await prisma.sale.create({
+        data: {
+          code: `TRX-${String(sSeq).padStart(6, "0")}`,
+          storeId, customerId,
+          userId: userIds.get("kasir@satupos.id")!,
+          date, subtotal, discount: 0, tax, total, cogs,
+          paid: total, change: 0, paymentMethod: "CASH",
+          pointsEarned: Math.round(total / 1000),
+          // This month's receipts are left waiting for the pengiriman screen.
+          isDelivered: monthsAgo > 0,
+          lines: { create: lines },
+        },
+      });
     }
   }
 
