@@ -46,9 +46,10 @@ export default function BandingClient() {
 
       {loading && <Loading />}
 
+      {/* 70% / 30% on wide screens; stacked below that, where 30% would be too narrow for the price card. */}
       {data && (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-6 px-6 pb-10 pt-5">
-          <div>
+        <div className="grid grid-cols-1 gap-6 px-6 pb-10 pt-5 xl:grid-cols-[7fr_3fr]">
+          <div className="min-w-0">
             <h4 className="mb-1 text-base">{data.item.name}</h4>
             <div className="mb-3.5 text-[13px] text-slate-7">
               {data.item.code} · satuan dasar {data.item.unit} · terjual {num(data.monthlyQty)} dalam 30 hari
@@ -101,7 +102,7 @@ export default function BandingClient() {
             )}
           </div>
 
-          <div className="max-w-[420px]">
+          <div className="min-w-0">
             <h4 className="mb-3.5 text-base">Harga jual tertinggi</h4>
             {data.highestSale ? (
               <div className="bg-white p-5 ring-2 ring-ink">
