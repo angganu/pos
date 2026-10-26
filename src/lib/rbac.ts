@@ -103,6 +103,7 @@ export const NAV_PERMS: Record<string, Permission> = {
   laba: "store.all",
   "riwayat-penjualan": "history.view",
   "riwayat-pembelian": "history.view",
+  "riwayat-pengiriman": "history.view",
   banding: "supplier.compare",
   laporan: "report.view",
   pengguna: "user.manage",

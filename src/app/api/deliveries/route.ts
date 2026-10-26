@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, fail, qp, qpInt, audit, readJson } from "@/lib/api";
-import { requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
+import { route, ok, fail, qp, qpInt, qpDate, audit, readJson } from "@/lib/api";
+import { can, requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { docCode } from "@/lib/format";
 import { noteKey } from "@/lib/delivery";
 
@@ -21,16 +21,20 @@ const customerSelect = {
 } satisfies Prisma.CustomerSelect;
 
 /**
- * GET /api/deliveries?pending=1&storeId= -> one store's sales still waiting to be delivered
- * GET /api/deliveries?id=                -> one delivery with every surat jalan, for printing
- * GET /api/deliveries?storeId=           -> delivery history
+ * GET /api/deliveries?pending=1&storeId=     -> one store's sales still waiting to be delivered
+ * GET /api/deliveries?id=                    -> one delivery with every surat jalan, for printing
+ * GET /api/deliveries?storeId=&from=&to=&q=  -> delivery history (from/to on the delivery date)
  */
 export const GET = route(async ({ user, req }) => {
-  requirePerm(user, "delivery.manage");
+  const pending = qp(req).get("pending") === "1";
+  // The waiting list serves the pengiriman screen; history and printing are reports,
+  // open to whoever reads histories and to whoever makes the deliveries.
+  if (pending) requirePerm(user, "delivery.manage");
+  else if (!can(user, "delivery.manage")) requirePerm(user, "history.view");
   const { storeId, pinned } = resolveStoreScope(user, qpInt(req, "storeId"));
   const id = qpInt(req, "id");
 
-  if (qp(req).get("pending") === "1") {
+  if (pending) {
     if (!storeId) return fail("Pilih satu toko untuk melihat faktur yang belum dikirim.", 400);
     const sales = await prisma.sale.findMany({
       where: { storeId, status: "POSTED", isDelivered: false },
@@ -83,8 +87,35 @@ export const GET = route(async ({ user, req }) => {
     );
   }
 
+  const from = qpDate(req, "from");
+  const to = qpDate(req, "to");
+  const q = qp(req).get("q")?.trim();
+
   const deliveries = await prisma.delivery.findMany({
-    where: storeId ? { storeId } : {},
+    where: {
+      ...(storeId ? { storeId } : {}),
+      ...(from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+      ...(q
+        ? {
+            OR: [
+              { code: { contains: q } },
+              { driver: { contains: q } },
+              { vehicle: { vehicleNo: { contains: q } } },
+              {
+                notes: {
+                  some: {
+                    OR: [
+                      { code: { contains: q } },
+                      { customer: { name: { contains: q } } },
+                      { sales: { some: { code: { contains: q } } } },
+                    ],
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    },
     include: {
       store: { select: { name: true } },
       vehicle: { select: { vehicleNo: true, vehicleType: true } },
@@ -98,7 +129,7 @@ export const GET = route(async ({ user, req }) => {
       },
     },
     orderBy: [{ date: "desc" }, { id: "desc" }],
-    take: 100,
+    take: 200,
   });
 
   return ok(

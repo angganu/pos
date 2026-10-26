@@ -6,9 +6,9 @@ import clsx from "clsx";
 import { format } from "date-fns";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, Loading, EmptyState, Modal, SearchSelect } from "@/components/ui";
+import { PageHeader, Loading, EmptyState, SearchSelect } from "@/components/ui";
 import { api, qs } from "@/lib/client";
-import { rp, num, fday, fdatetime } from "@/lib/format";
+import { rp, num, fdatetime } from "@/lib/format";
 import { mergeLines, noteKey, type DeliveryLine } from "@/lib/delivery";
 
 type Customer = { id: number; code: string; name: string; address: string | null; phone: string | null };
@@ -23,16 +23,10 @@ type Vehicle = {
   driver: string | null; driverAssistance: string | null; active: boolean;
 };
 
-type DeliveryRow = {
-  id: number; code: string; date: string; store: string; createdBy: string;
-  vehicleNo: string; vehicleType: string; driver: string | null;
-  notes: { id: number; code: string; customer: string; invoices: string[] }[];
-};
-
 const WALK_IN = "Pelanggan Umum";
 
 export default function PengirimanClient() {
-  // Invoices are picked from one store at a time; history follows the same picker (or all stores).
+  // Invoices are picked from one store at a time.
   const { storeId, store } = useApp();
 
   const { data: pending, loading, error, refresh: refreshPending } = useFetch<PendingSale[]>(
@@ -40,10 +34,6 @@ export default function PengirimanClient() {
     [storeId]
   );
   const { data: vehicles } = useFetch<Vehicle[]>("/api/vehicles");
-  const { data: history, refresh: refreshHistory } = useFetch<DeliveryRow[]>(
-    `/api/deliveries${qs({ storeId })}`,
-    [storeId]
-  );
 
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState<Set<number>>(new Set());
@@ -52,8 +42,6 @@ export default function PengirimanClient() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string; deliveryId?: number } | null>(null);
-  const [cancelling, setCancelling] = useState<DeliveryRow | null>(null);
-  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -118,7 +106,6 @@ export default function PengirimanClient() {
       setPicked(new Set());
       setNote("");
       refreshPending();
-      refreshHistory();
     } catch (err) {
       setMsg({ kind: "err", text: err instanceof Error ? err.message : "Gagal menyimpan pengiriman." });
     } finally {
@@ -126,28 +113,17 @@ export default function PengirimanClient() {
     }
   }
 
-  async function cancel() {
-    if (!cancelling) return;
-    setBusy(true);
-    setCancelError(null);
-    try {
-      await api.del(`/api/deliveries${qs({ id: cancelling.id })}`);
-      setCancelling(null);
-      refreshPending();
-      refreshHistory();
-    } catch (err) {
-      setCancelError(err instanceof Error ? err.message : "Gagal membatalkan pengiriman.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
-    <div>
+    <div className="pb-10">
       <PageHeader
         kicker="Transaksi / Delivery"
         title="Pengiriman"
         subtitle="Pilih faktur yang belum dikirim — satu surat jalan per pelanggan, barang yang sama digabung."
+        actions={
+          <Link href="/riwayat-pengiriman" className="btn btn-secondary h-11 px-4 text-[15px] no-underline">
+            Riwayat pengiriman
+          </Link>
+        }
       />
 
       {msg && (
@@ -169,10 +145,7 @@ export default function PengirimanClient() {
 
       {!storeId ? (
         <div className="px-6 pt-4">
-          <EmptyState
-            title="Pilih satu toko di bagian atas untuk membuat pengiriman."
-            hint="Riwayat di bawah menampilkan pengiriman semua toko."
-          />
+          <EmptyState title="Pilih satu toko di bagian atas untuk membuat pengiriman." />
         </div>
       ) : (
         <div className="flex flex-wrap items-start gap-6 px-6 pt-4">
@@ -305,7 +278,7 @@ export default function PengirimanClient() {
               {busy ? "Menyimpan…" : "Simpan & buat surat jalan"}
             </button>
             <p className="mt-2.5 text-xs text-slate-7">
-              Faktur yang dipilih ditandai sudah dikirim. Pembatalan mengembalikannya ke daftar.
+              Faktur yang dipilih ditandai sudah dikirim. Membatalkan pengiriman di Riwayat Pengiriman mengembalikannya ke daftar.
             </p>
           </div>
         </div>
@@ -363,93 +336,6 @@ export default function PengirimanClient() {
           </div>
         </div>
       )}
-
-      <div className="px-6 pb-10 pt-8">
-        <h4 className="mb-2.5 text-base">Riwayat pengiriman</h4>
-        <div className="table-wrap">
-          <table className="tbl min-w-[900px]">
-            <thead>
-              <tr>
-                <th className="w-[160px]">Nomor</th>
-                <th className="w-[130px]">Tanggal kirim</th>
-                <th className="w-[210px]">Kendaraan</th>
-                <th>Surat jalan</th>
-                <th className="w-[190px]" />
-              </tr>
-            </thead>
-            <tbody>
-              {(history ?? []).map((d) => (
-                <tr key={d.id}>
-                  <td>
-                    <div className="font-semibold">{d.code}</div>
-                    <div className="text-[11px] text-slate-7">{d.store} · {d.createdBy}</div>
-                  </td>
-                  <td className="text-[13px]">{fday(d.date)}</td>
-                  <td>
-                    <div className="text-sm font-semibold">{d.vehicleNo}</div>
-                    <div className="text-[11px] text-slate-7">{[d.vehicleType, d.driver].filter(Boolean).join(" · ")}</div>
-                  </td>
-                  <td className="text-[13px]">
-                    {d.notes.map((n) => (
-                      <div key={n.id}>
-                        <Link
-                          href={`/surat-jalan/${d.id}?sj=${n.id}`}
-                          target="_blank"
-                          className="font-semibold"
-                          title="Cetak surat jalan ini saja"
-                        >
-                          {n.code}
-                        </Link>{" "}
-                        {n.customer} <span className="text-slate-7">({n.invoices.join(", ")})</span>
-                      </div>
-                    ))}
-                  </td>
-                  <td className="whitespace-nowrap text-right">
-                    <Link href={`/surat-jalan/${d.id}`} target="_blank" className="btn btn-ghost text-xs no-underline">
-                      Cetak semua
-                    </Link>
-                    <button
-                      className="btn btn-ghost text-xs text-brand-700"
-                      onClick={() => {
-                        setCancelling(d);
-                        setCancelError(null);
-                      }}
-                    >
-                      Batalkan
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {(history?.length ?? 0) === 0 && <EmptyState title="Belum ada pengiriman." />}
-        </div>
-      </div>
-
-      <Modal
-        open={cancelling !== null}
-        onClose={() => setCancelling(null)}
-        title="Batalkan pengiriman"
-        width="480px"
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setCancelling(null)}>Kembali</button>
-            <button className="btn btn-danger" onClick={cancel} disabled={busy}>
-              {busy ? "Membatalkan…" : "Batalkan pengiriman"}
-            </button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3.5">
-          {cancelError && (
-            <div className="bg-brand-100 px-3 py-2 text-sm font-semibold text-brand-800">{cancelError}</div>
-          )}
-          <p className="m-0 text-sm">
-            Batalkan <b>{cancelling?.code}</b>? {cancelling?.notes.length} surat jalan dihapus dan fakturnya kembali ke
-            daftar belum dikirim.
-          </p>
-        </div>
-      </Modal>
     </div>
   );
 }
