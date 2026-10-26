@@ -5,7 +5,7 @@ import clsx from "clsx";
 import useFetch from "@/components/use-fetch";
 import { PageHeader, Loading, EmptyState, Chip } from "@/components/ui";
 import { qs } from "@/lib/client";
-import { rp, num, fdate } from "@/lib/format";
+import { rp, num, pct, fdate } from "@/lib/format";
 
 type Comparison = {
   item: { id: number; code: string; name: string; unit: string };
@@ -13,7 +13,8 @@ type Comparison = {
   offers: {
     supplierId: number; supplier: string; supplierCode: string; terms: string | null;
     unitLabel: string; pricePerUnit: number; pricePerBase: number; lastPurchase: string;
-    isCheapest: boolean; deltaPerBase: number; monthlyExtraCost: number;
+    purchaseCode: string; baseQty: number; rejectedQty: number; rejectRate: number;
+    isCheapest: boolean; isLowestReject: boolean; deltaPerBase: number; monthlyExtraCost: number;
   }[];
   highestSale: { price: number; customer: string; store: string; marginVsCheapest: number; spreadPerUnit: number } | null;
 };
@@ -52,19 +53,21 @@ export default function BandingClient() {
           <div className="min-w-0">
             <h4 className="mb-1 text-base">{data.item.name}</h4>
             <div className="mb-3.5 text-[13px] text-slate-7">
-              {data.item.code} · satuan dasar {data.item.unit} · terjual {num(data.monthlyQty)} dalam 30 hari
+              {data.item.code} · satuan dasar {data.item.unit} · terjual {num(data.monthlyQty)} dalam 30 hari ·
+              harga dan reject dari pembelian terakhir tiap supplier
             </div>
 
             {data.offers.length === 0 ? (
               <EmptyState title="Belum ada supplier yang pernah memasok barang ini." />
             ) : (
               <div className="table-wrap">
-                <table className="tbl min-w-[600px]">
+                <table className="tbl min-w-[780px]">
                   <thead>
                     <tr>
                       <th>Supplier</th>
                       <th className="w-[170px] text-right">Harga penawaran</th>
                       <th className="w-[140px] text-right">Per satuan dasar</th>
+                      <th className="w-[170px] text-right">Persentase reject</th>
                       <th className="w-[190px] text-right">Selisih</th>
                     </tr>
                   </thead>
@@ -79,13 +82,27 @@ export default function BandingClient() {
                             <span className="text-sm font-semibold">{o.supplier}</span>
                           </div>
                           <div className="mt-1 text-[11px] text-slate-7">
-                            {o.supplierCode} · {o.terms ?? "—"} · terakhir {fdate(o.lastPurchase)}
+                            {o.supplierCode} · {o.terms ?? "—"} · terakhir {fdate(o.lastPurchase)} ({o.purchaseCode})
                           </div>
                         </td>
                         <td className="text-right text-[13px]">
                           {rp(o.pricePerUnit)} <span className="text-slate-6">/ {o.unitLabel}</span>
                         </td>
                         <td className="text-right text-[15px] font-semibold">{rp(o.pricePerBase)}</td>
+                        <td className="text-right">
+                          <div
+                            className={clsx(
+                              "text-[15px] font-semibold",
+                              o.isLowestReject ? "text-teal-700" : o.rejectRate > 0 && "text-amber-700"
+                            )}
+                          >
+                            {pct(o.rejectRate, 1)}
+                          </div>
+                          <div className="text-[11px] text-slate-7">
+                            {o.isLowestReject && "Reject terendah · "}
+                            {num(o.rejectedQty)} dari {num(o.baseQty)} {data.item.unit}
+                          </div>
+                        </td>
                         <td className="text-right">
                           <div className={clsx("text-[13px] font-semibold", o.isCheapest ? "text-teal-700" : "text-brand-600")}>
                             {o.isCheapest ? "Termurah" : `+ ${rp(o.deltaPerBase)}`}

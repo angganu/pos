@@ -2,7 +2,7 @@ import { prisma, serialize, dec } from "@/lib/db";
 import { route, ok, fail, qpInt } from "@/lib/api";
 import { requirePerm } from "@/lib/rbac";
 import { highestSellingPrice } from "@/lib/pricing";
-import { round2 } from "@/lib/units";
+import { round2, round4 } from "@/lib/units";
 
 /**
  * "Where is the same item cheapest, and what is the most I can sell it for?"
@@ -53,10 +53,10 @@ export const GET = route(async ({ user, req }) => {
   });
   if (!item) return fail("Barang tidak ditemukan.", 404);
 
-  // Latest offer from each supplier who has ever quoted this item.
+  // Latest offer from each supplier who has ever quoted this item, with what was rejected from it.
   const lines = await prisma.purchaseLine.findMany({
     where: { itemId },
-    include: { purchase: { include: { supplier: true } } },
+    include: { purchase: { include: { supplier: true } }, rejectLines: { select: { qty: true } } },
     orderBy: { id: "desc" },
   });
 
@@ -66,19 +66,32 @@ export const GET = route(async ({ user, req }) => {
   }
 
   const offers = [...latest.values()]
-    .map((l) => ({
-      supplierId: l.purchase.supplierId,
-      supplier: l.purchase.supplier.name,
-      supplierCode: l.purchase.supplier.code,
-      terms: l.purchase.supplier.terms,
-      unitLabel: l.unitLabel,
-      pricePerUnit: dec(l.pricePerUnit),
-      pricePerBase: dec(l.pricePerBase),
-      lastPurchase: l.purchase.date,
-    }))
+    .map((l) => {
+      // Reject rate of that same latest delivery, in base units: the cheapest price may be the one that arrives broken.
+      const baseQty = dec(l.baseQty);
+      const rejectedQty = round4(l.rejectLines.reduce((a, r) => a + dec(r.qty), 0));
+      return {
+        supplierId: l.purchase.supplierId,
+        supplier: l.purchase.supplier.name,
+        supplierCode: l.purchase.supplier.code,
+        terms: l.purchase.supplier.terms,
+        unitLabel: l.unitLabel,
+        pricePerUnit: dec(l.pricePerUnit),
+        pricePerBase: dec(l.pricePerBase),
+        lastPurchase: l.purchase.date,
+        purchaseCode: l.purchase.code,
+        baseQty,
+        rejectedQty,
+        rejectRate: baseQty ? rejectedQty / baseQty : 0,
+      };
+    })
     .sort((a, b) => a.pricePerBase - b.pricePerBase);
 
   const cheapest = offers[0]?.pricePerBase ?? 0;
+  const rates = offers.map((o) => o.rejectRate);
+  const lowestReject = Math.min(...rates);
+  // Only worth flagging when the suppliers actually differ.
+  const rejectsDiffer = rates.length > 1 && lowestReject < Math.max(...rates);
 
   // 30-day sales volume, to price the cost of buying from the wrong supplier.
   const since = new Date();
@@ -98,6 +111,7 @@ export const GET = route(async ({ user, req }) => {
       offers: offers.map((o, i) => ({
         ...o,
         isCheapest: i === 0,
+        isLowestReject: rejectsDiffer && o.rejectRate === lowestReject,
         deltaPerBase: round2(o.pricePerBase - cheapest),
         monthlyExtraCost: round2((o.pricePerBase - cheapest) * monthlyQty),
       })),
