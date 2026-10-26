@@ -61,58 +61,70 @@ export default function BandingClient() {
               <EmptyState title="Belum ada supplier yang pernah memasok barang ini." />
             ) : (
               <div className="table-wrap">
-                <table className="tbl min-w-[780px]">
+                {/* Number columns hug their content and never wrap; Supplier takes the rest, at most 2 lines per text. */}
+                <table className="tbl min-w-[720px] [&_td]:whitespace-nowrap">
                   <thead>
                     <tr>
-                      <th>Supplier</th>
-                      <th className="w-[170px] text-right">Harga penawaran</th>
-                      <th className="w-[140px] text-right">Per satuan dasar</th>
-                      <th className="w-[170px] text-right">Persentase reject</th>
-                      <th className="w-[190px] text-right">Selisih</th>
+                      <th className="w-full">Supplier</th>
+                      <th className="text-right">Harga penawaran</th>
+                      <th className="text-right">Per satuan dasar</th>
+                      <th className="text-right">Persentase reject</th>
+                      <th className="text-right">Selisih</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.offers.map((o) => (
-                      <tr key={o.supplierId} className={clsx(o.isCheapest && "bg-brand-100")}>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <span className={o.isCheapest ? "tag tag-accent" : "tag tag-neutral"}>
-                              {o.isCheapest ? "PILIH INI" : "Alternatif"}
-                            </span>
-                            <span className="text-sm font-semibold">{o.supplier}</span>
-                          </div>
-                          <div className="mt-1 text-[11px] text-slate-7">
-                            {o.supplierCode} · {o.terms ?? "—"} · terakhir {fdate(o.lastPurchase)} ({o.purchaseCode})
-                          </div>
-                        </td>
-                        <td className="text-right text-[13px]">
-                          {rp(o.pricePerUnit)} <span className="text-slate-6">/ {o.unitLabel}</span>
-                        </td>
-                        <td className="text-right text-[15px] font-semibold">{rp(o.pricePerBase)}</td>
-                        <td className="text-right">
-                          <div
-                            className={clsx(
-                              "text-[15px] font-semibold",
-                              o.isLowestReject ? "text-teal-700" : o.rejectRate > 0 && "text-amber-700"
-                            )}
-                          >
-                            {pct(o.rejectRate, 1)}
-                          </div>
-                          <div className="text-[11px] text-slate-7">
-                            {o.isLowestReject && "Reject terendah · "}
-                            {num(o.rejectedQty)} dari {num(o.baseQty)} {data.item.unit}
-                          </div>
-                        </td>
-                        <td className="text-right">
-                          <div className={clsx("text-[13px] font-semibold", o.isCheapest ? "text-teal-700" : "text-brand-600")}>
-                            {o.isCheapest ? "Termurah" : `+ ${rp(o.deltaPerBase)}`}
-                          </div>
-                          <div className="text-[11px] text-slate-7">
-                            {o.isCheapest ? "Acuan" : `Rugi ${rp(o.monthlyExtraCost)} / bulan`}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {data.offers.map((o) => {
+                      const details = `${o.supplierCode} · ${o.terms ?? "—"} · terakhir ${fdate(o.lastPurchase)} (${o.purchaseCode})`;
+                      return (
+                        <tr key={o.supplierId} className={clsx(o.isCheapest && "bg-brand-100")}>
+                          <td>
+                            <div className="flex items-start gap-2">
+                              <span className={clsx("tag mt-px flex-none", o.isCheapest ? "tag-accent" : "tag-neutral")}>
+                                {o.isCheapest ? "PILIH INI" : "Alternatif"}
+                              </span>
+                              <span
+                                className="line-clamp-2 min-w-0 whitespace-normal text-sm font-semibold [overflow-wrap:anywhere]"
+                                title={o.supplier}
+                              >
+                                {o.supplier}
+                              </span>
+                            </div>
+                            <div
+                              className="mt-1 line-clamp-2 whitespace-normal text-[11px] text-slate-7 [overflow-wrap:anywhere]"
+                              title={details}
+                            >
+                              {details}
+                            </div>
+                          </td>
+                          <td className="text-right text-[13px]">
+                            {rp(o.pricePerUnit)} <span className="text-slate-6">/ {o.unitLabel}</span>
+                          </td>
+                          <td className="text-right text-[15px] font-semibold">{rp(o.pricePerBase)}</td>
+                          <td className="text-right">
+                            <div
+                              className={clsx(
+                                "text-[15px] font-semibold",
+                                o.isLowestReject ? "text-teal-700" : o.rejectRate > 0 && "text-amber-700"
+                              )}
+                            >
+                              {o.isLowestReject && <span className="tag tag-teal mr-1.5 align-middle">Terendah</span>}
+                              {pct(o.rejectRate, 1)}
+                            </div>
+                            <div className="text-[11px] text-slate-7">
+                              {num(o.rejectedQty)} dari {num(o.baseQty)} {data.item.unit}
+                            </div>
+                          </td>
+                          <td className="text-right">
+                            <div className={clsx("text-[13px] font-semibold", o.isCheapest ? "text-teal-700" : "text-brand-600")}>
+                              {o.isCheapest ? "Termurah" : `+ ${rp(o.deltaPerBase)}`}
+                            </div>
+                            <div className="text-[11px] text-slate-7">
+                              {o.isCheapest ? "Acuan" : `Rugi ${rp(o.monthlyExtraCost)} / bulan`}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
