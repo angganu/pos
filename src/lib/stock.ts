@@ -68,15 +68,20 @@ export async function assertStockAvailable(
 /**
  * Stock promised to open POs, per item: ordered but not invoiced yet. It is still
  * counted in ItemStock — stock only leaves with the invoice — but no longer free to order.
+ * `exceptOrderId` leaves out a PO being edited, whose promise is the one being replaced.
  */
 export async function reservedQty(
   tx: Prisma.TransactionClient,
   storeId: number,
-  itemIds: number[]
+  itemIds: number[],
+  exceptOrderId?: number
 ): Promise<Map<number, number>> {
   const rows = await tx.orderItem.groupBy({
     by: ["itemId"],
-    where: { itemId: { in: itemIds }, order: { storeId, status: "UNPAID" } },
+    where: {
+      itemId: { in: itemIds },
+      order: { storeId, status: "UNPAID", ...(exceptOrderId ? { id: { not: exceptOrderId } } : {}) },
+    },
     _sum: { qty: true },
   });
   return new Map(rows.map((r) => [r.itemId, dec(r._sum.qty)]));

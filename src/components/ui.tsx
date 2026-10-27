@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
 
@@ -97,6 +98,57 @@ export function Chip({
       )}
     >
       {children}
+    </button>
+  );
+}
+
+const ACTION_TONE = {
+  neutral: "bg-slate-2 text-ink hover:bg-slate-3",
+  primary: "bg-brand-100 text-brand-700 hover:bg-brand-600 hover:text-white",
+  success: "bg-teal-100 text-teal-700 hover:bg-teal-600 hover:text-white",
+  warning: "bg-amber-100 text-amber-700 hover:bg-amber-600 hover:text-white",
+  danger: "bg-violet-100 text-violet-700 hover:bg-violet-600 hover:text-white",
+} as const;
+
+/**
+ * An icon-only row action on a tinted square. Its name shows in a tooltip on hover or
+ * keyboard focus and is what screen readers announce. With `href` it is a link.
+ */
+export function IconAction({
+  label,
+  icon: Icon,
+  tone = "neutral",
+  href,
+  onClick,
+}: {
+  label: string;
+  icon: React.ElementType;
+  tone?: keyof typeof ACTION_TONE;
+  href?: string;
+  onClick?: () => void;
+}) {
+  const className = clsx(
+    "group relative inline-flex h-8 w-8 flex-none cursor-pointer items-center justify-center no-underline transition-colors",
+    ACTION_TONE[tone]
+  );
+  const content = (
+    <>
+      <Icon size={15} strokeWidth={2.2} aria-hidden />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 -translate-x-1/2 whitespace-nowrap bg-ink px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+      >
+        {label}
+      </span>
+    </>
+  );
+  return href ? (
+    <Link href={href} aria-label={label} className={className}>
+      {content}
+    </Link>
+  ) : (
+    <button type="button" aria-label={label} onClick={onClick} className={className}>
+      {content}
     </button>
   );
 }

@@ -4,9 +4,10 @@ import { prisma, serialize, dec } from "@/lib/db";
 import { route, ok, fail, qp, qpInt, qpDate, audit, readJson, retryOnCodeClash } from "@/lib/api";
 import { can, requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { assertStockAvailable, nextSeq, reservedQty } from "@/lib/stock";
-import { resolvePrices } from "@/lib/pricing";
+import { resolvePrices, type ResolvedPrice } from "@/lib/pricing";
 import { round2, round4 } from "@/lib/units";
 import { docCode } from "@/lib/format";
+import { HttpError } from "@/lib/errors";
 
 /** The surat jalan that carried a PO, and the trip it was on. */
 const noteSelect = {
@@ -52,7 +53,7 @@ export const GET = route(async ({ user, req }) => {
       serialize({
         id: o.id, code: o.code, date: o.date, status: o.status, isDelivered: o.isDelivered,
         subtotal: dec(o.subtotal), discount: dec(o.discount), tax: dec(o.tax), total: dec(o.total),
-        store: o.store, customer: o.customer, createdBy: o.user.name,
+        storeId: o.storeId, store: o.store, customer: o.customer, createdBy: o.user.name,
         delivery: toDelivery(o.deliveryNote), invoice: o.sale,
         items: o.items.map((l) => ({
           id: l.id, itemId: l.itemId, code: l.item.code, name: l.item.name, unit: l.item.baseUnit.name,
@@ -127,6 +128,91 @@ const schema = z.object({
     .min(1, "Keranjang kosong."),
 });
 
+type OrderBody = z.infer<typeof schema>;
+
+/** Each line's price for (item, store, customer); an item without a price in this store stops the PO. */
+async function linePrices(body: OrderBody) {
+  const priceMap = await resolvePrices(
+    body.lines.map((l) => l.itemId),
+    body.storeId,
+    body.customerId
+  );
+  const missing = body.lines.filter((l) => {
+    const p = priceMap.get(l.itemId);
+    return l.unitPrice === undefined && (!p || p.source === "none");
+  });
+  if (missing.length) throw new HttpError(`Harga belum diatur untuk ${missing.length} barang di toko ini.`, 422);
+  return priceMap;
+}
+
+/**
+ * A PO's lines and totals, once the stock not yet promised to other open POs is found to
+ * cover them. Editing passes the PO's own id, so its old promise doesn't count against it.
+ */
+async function priceOrder(
+  tx: Prisma.TransactionClient,
+  body: OrderBody,
+  priceMap: Map<number, ResolvedPrice>,
+  exceptOrderId?: number
+) {
+  const items = [];
+  let subtotal = 0;
+  let discount = 0;
+  /** Total qty per item, so an item on two lines is checked against stock once. */
+  const wanted = new Map<number, number>();
+
+  for (const l of body.lines) {
+    const resolved = priceMap.get(l.itemId);
+    const unitPrice = l.unitPrice ?? resolved?.price ?? 0;
+    const basePrice = resolved?.basePrice ?? unitPrice;
+    if (l.discount > round2(l.qty * unitPrice)) throw new Error("Diskon tidak boleh melebihi harga barang.");
+
+    subtotal += round2(l.qty * unitPrice);
+    discount += l.discount;
+    wanted.set(l.itemId, round4((wanted.get(l.itemId) ?? 0) + l.qty));
+
+    items.push({
+      itemId: l.itemId, qty: l.qty, unitPrice, basePrice,
+      discount: l.discount, total: round2(l.qty * unitPrice - l.discount),
+      isMember: resolved?.isMember ?? false,
+    });
+  }
+
+  const reserved = await reservedQty(tx, body.storeId, [...wanted.keys()], exceptOrderId);
+  for (const [itemId, qty] of wanted) {
+    await assertStockAvailable(tx, itemId, body.storeId, qty, reserved.get(itemId) ?? 0);
+  }
+
+  subtotal = round2(subtotal);
+  const taxable = round2(subtotal - discount);
+  const tax = body.taxEnabled ? round2(taxable * (body.taxRate / 100)) : 0;
+  return { items, subtotal, discount, tax, total: round2(taxable + tax) };
+}
+
+/** The PO as the kasir prints it. */
+async function slipOf(id: number) {
+  const slip = await prisma.order.findUniqueOrThrow({
+    where: { id },
+    include: {
+      store: true, customer: true, user: { select: { name: true } },
+      items: { include: { item: { include: { baseUnit: true } } } },
+    },
+  });
+  return serialize({
+    id: slip.id, code: slip.code, date: slip.date,
+    store: { name: slip.store.name, address: slip.store.address, phone: slip.store.phone },
+    customer: slip.customer ? { name: slip.customer.name, code: slip.customer.code } : null,
+    cashier: slip.user.name,
+    subtotal: dec(slip.subtotal), discount: dec(slip.discount),
+    tax: dec(slip.tax), total: dec(slip.total),
+    lines: slip.items.map((l) => ({
+      name: l.item.name, code: l.item.code, unit: l.item.baseUnit.name,
+      qty: dec(l.qty), unitPrice: dec(l.unitPrice), discount: dec(l.discount),
+      total: dec(l.total), isMember: l.isMember,
+    })),
+  });
+}
+
 /**
  * Taking a PO at the kasir, atomically:
  *   1. resolves each line's price for (item, store, customer)
@@ -141,92 +227,65 @@ export const POST = route(async ({ user, req }) => {
 
   // Overriding the resolved price is a pricing decision, not a cashier one.
   if (body.lines.some((l) => l.unitPrice !== undefined)) requirePerm(user, "price.manage");
-
-  const priceMap = await resolvePrices(
-    body.lines.map((l) => l.itemId),
-    body.storeId,
-    body.customerId
-  );
-
-  const missing = body.lines.filter((l) => {
-    const p = priceMap.get(l.itemId);
-    return l.unitPrice === undefined && (!p || p.source === "none");
-  });
-  if (missing.length) {
-    return fail(`Harga belum diatur untuk ${missing.length} barang di toko ini.`, 422);
-  }
+  const priceMap = await linePrices(body);
 
   const result = await retryOnCodeClash(() => prisma.$transaction(async (tx) => {
     const seq = await nextSeq(tx, "order");
-
-    const lines = [];
-    let subtotal = 0;
-    let lineDiscount = 0;
-    /** Total qty per item, so an item on two lines is checked against stock once. */
-    const wanted = new Map<number, number>();
-
-    for (const l of body.lines) {
-      const resolved = priceMap.get(l.itemId);
-      const unitPrice = l.unitPrice ?? resolved?.price ?? 0;
-      const basePrice = resolved?.basePrice ?? unitPrice;
-      if (l.discount > round2(l.qty * unitPrice)) throw new Error("Diskon tidak boleh melebihi harga barang.");
-
-      subtotal += round2(l.qty * unitPrice);
-      lineDiscount += l.discount;
-      wanted.set(l.itemId, round4((wanted.get(l.itemId) ?? 0) + l.qty));
-
-      lines.push({
-        itemId: l.itemId, qty: l.qty, unitPrice, basePrice,
-        discount: l.discount, total: round2(l.qty * unitPrice - l.discount),
-        isMember: resolved?.isMember ?? false,
-      });
-    }
-
-    const reserved = await reservedQty(tx, body.storeId, [...wanted.keys()]);
-    for (const [itemId, qty] of wanted) {
-      await assertStockAvailable(tx, itemId, body.storeId, qty, reserved.get(itemId) ?? 0);
-    }
-
-    subtotal = round2(subtotal);
-    const taxable = round2(subtotal - lineDiscount);
-    const tax = body.taxEnabled ? round2(taxable * (body.taxRate / 100)) : 0;
-
+    const { items, ...totals } = await priceOrder(tx, body, priceMap);
     return tx.order.create({
       data: {
         code: docCode("PO", seq),
         storeId: body.storeId, customerId: body.customerId, userId: user.id,
-        subtotal, discount: lineDiscount, tax, total: round2(taxable + tax),
-        items: { create: lines },
+        ...totals,
+        items: { create: items },
       },
     });
   }));
 
   await audit(user.id, "create", "Order", result.id, { code: result.code, total: dec(result.total) });
+  return ok(await slipOf(result.id), 201);
+});
 
-  const slip = await prisma.order.findUniqueOrThrow({
-    where: { id: result.id },
-    include: {
-      store: true, customer: true, user: { select: { name: true } },
-      items: { include: { item: { include: { baseUnit: true } } } },
-    },
+const editSchema = schema.extend({ id: z.number().int() });
+
+/**
+ * Editing a PO from the kasir while it waits for delivery: its lines are replaced and
+ * priced again, with the same checks as taking it. It keeps its number and date. Once
+ * delivered its goods are on a surat jalan, so it can only be invoiced or cancelled.
+ */
+export const PUT = route(async ({ user, req }) => {
+  requirePerm(user, "sale.create");
+  const body = editSchema.parse(await readJson(req));
+  assertStoreAccess(user, body.storeId);
+
+  // Overriding the resolved price is a pricing decision, not a cashier one.
+  if (body.lines.some((l) => l.unitPrice !== undefined)) requirePerm(user, "price.manage");
+  const priceMap = await linePrices(body);
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Lock the PO first: a delivery or cancellation of it waits until it is rewritten.
+    await tx.$queryRaw`SELECT id FROM \`Order\` WHERE id = ${body.id} FOR UPDATE`;
+    const order = await tx.order.findUnique({
+      where: { id: body.id },
+      select: { code: true, storeId: true, status: true, isDelivered: true },
+    });
+    if (!order) throw new Error("PO tidak ditemukan.");
+    assertStoreAccess(user, order.storeId);
+    if (order.status !== "UNPAID" || order.isDelivered) {
+      throw new Error(`PO ${order.code} sudah dikirim, ditagih atau dibatalkan, jadi tidak bisa diubah lagi.`);
+    }
+    if (order.storeId !== body.storeId) throw new Error("Toko sebuah PO tidak bisa diganti.");
+
+    const { items, ...totals } = await priceOrder(tx, body, priceMap, body.id);
+    await tx.orderItem.deleteMany({ where: { orderId: body.id } });
+    return tx.order.update({
+      where: { id: body.id },
+      data: { customerId: body.customerId, ...totals, items: { create: items } },
+    });
   });
 
-  return ok(
-    serialize({
-      id: slip.id, code: slip.code, date: slip.date,
-      store: { name: slip.store.name, address: slip.store.address, phone: slip.store.phone },
-      customer: slip.customer ? { name: slip.customer.name, code: slip.customer.code } : null,
-      cashier: slip.user.name,
-      subtotal: dec(slip.subtotal), discount: dec(slip.discount),
-      tax: dec(slip.tax), total: dec(slip.total),
-      lines: slip.items.map((l) => ({
-        name: l.item.name, code: l.item.code, unit: l.item.baseUnit.name,
-        qty: dec(l.qty), unitPrice: dec(l.unitPrice), discount: dec(l.discount),
-        total: dec(l.total), isMember: l.isMember,
-      })),
-    }),
-    201
-  );
+  await audit(user.id, "update", "Order", result.id, { code: result.code, total: dec(result.total) });
+  return ok(await slipOf(result.id));
 });
 
 /**

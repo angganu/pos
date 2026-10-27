@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Eye, Printer } from "lucide-react";
+import { Ban, Eye, Pencil, Printer } from "lucide-react";
 import { format, startOfMonth } from "date-fns";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, Loading, ErrorBox, EmptyState, Modal, Chip } from "@/components/ui";
+import { PageHeader, Loading, ErrorBox, EmptyState, Modal, Chip, IconAction } from "@/components/ui";
 import { api, qs } from "@/lib/client";
 import { can } from "@/lib/rbac";
 import { rp, num, fdatetime, fday } from "@/lib/format";
@@ -39,6 +39,7 @@ const STATUS: Record<Status, { label: string; tag: string }> = {
 export default function RiwayatPoClient() {
   const { user, storeId, stores } = useApp();
   const canCancel = can(user, "sale.void");
+  const canEdit = can(user, "sale.create");
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<Status | "">("");
@@ -133,7 +134,7 @@ export default function RiwayatPoClient() {
                   <th className="w-[120px]">Status</th>
                   <th className="w-[160px]">Pengiriman</th>
                   <th className="w-[130px]">Invoice</th>
-                  <th className="w-[110px]" />
+                  <th className="w-[130px]" />
                 </tr>
               </thead>
               <tbody>
@@ -170,21 +171,25 @@ export default function RiwayatPoClient() {
                       )}
                     </td>
                     <td className="text-[13px]">{o.invoiceCode ?? "—"}</td>
-                    <td className="whitespace-nowrap text-right">
-                      <button className="btn btn-ghost px-1.5 py-1" onClick={() => setDetailId(o.id)} aria-label="Lihat detail">
-                        <Eye size={15} />
-                      </button>
-                      {canCancel && o.status === "UNPAID" && (
-                        <button
-                          className="btn btn-ghost text-xs text-brand-700"
-                          onClick={() => {
-                            setCancelling(o);
-                            setCancelError(null);
-                          }}
-                        >
-                          Batalkan
-                        </button>
-                      )}
+                    <td>
+                      <div className="flex justify-end gap-1.5">
+                        <IconAction label="Lihat detail" icon={Eye} tone="success" onClick={() => setDetailId(o.id)} />
+                        {/* Only before delivery: once on a surat jalan its goods are fixed. */}
+                        {canEdit && o.status === "UNPAID" && !o.isDelivered && (
+                          <IconAction label="Edit PO" icon={Pencil} tone="warning" href={`/kasir?edit=${o.id}`} />
+                        )}
+                        {canCancel && o.status === "UNPAID" && (
+                          <IconAction
+                            label="Batalkan PO"
+                            icon={Ban}
+                            tone="danger"
+                            onClick={() => {
+                              setCancelling(o);
+                              setCancelError(null);
+                            }}
+                          />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

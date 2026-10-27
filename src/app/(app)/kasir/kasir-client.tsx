@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Barcode, Minus, Plus, X, Pause } from "lucide-react";
 import clsx from "clsx";
 import { useApp } from "@/components/app-context";
@@ -21,24 +22,39 @@ type ItemRow = {
 
 type CustomerRow = { id: number; code: string; name: string; tier: string; phone: string | null; points: number };
 type CartLine = { itemId: number; qty: number; discount: number };
-type Slip = Awaited<ReturnType<typeof postOrder>>;
 
-/** The kasir takes a purchase order: paid later, by the invoice made once it is delivered. */
-async function postOrder(body: unknown) {
-  return api.post<{
-    id: number; code: string; date: string;
-    store: { name: string; address: string | null; phone: string | null };
-    customer: { name: string; code: string } | null;
-    cashier: string; subtotal: number; discount: number; tax: number; total: number;
-    lines: { name: string; code: string; unit: string; qty: number; unitPrice: number; discount: number; total: number; isMember: boolean }[];
-  }>("/api/orders", body);
+type Slip = {
+  id: number; code: string; date: string;
+  store: { name: string; address: string | null; phone: string | null };
+  customer: { name: string; code: string } | null;
+  cashier: string; subtotal: number; discount: number; tax: number; total: number;
+  lines: { name: string; code: string; unit: string; qty: number; unitPrice: number; discount: number; total: number; isMember: boolean }[];
+};
+
+/** A PO opened with ?edit=, as much of it as the form needs. */
+type EditSource = {
+  id: number; code: string; storeId: number; status: string; isDelivered: boolean; tax: number;
+  customer: { id: number } | null;
+  items: { itemId: number; qty: number; discount: number }[];
+};
+
+/**
+ * The kasir takes a purchase order — paid later, by the invoice made once it is
+ * delivered — or, given its id, saves the changes to one still waiting for delivery.
+ */
+async function saveOrder(body: Record<string, unknown>, id?: number) {
+  return id ? api.put<Slip>("/api/orders", { ...body, id }) : api.post<Slip>("/api/orders", body);
 }
 
 const TAX_RATE = 11;
 
-export default function KasirClient() {
+export default function KasirClient({ editId }: { editId: number | null }) {
   const { user, storeId, stores } = useApp();
-  const effectiveStoreId = storeId ?? user.storeId ?? stores[0]?.id ?? null;
+  const router = useRouter();
+  /** The PO open for editing; saving writes over it instead of taking a new one. */
+  const [editing, setEditing] = useState<{ id: number; code: string; storeId: number } | null>(null);
+  // An edited PO stays in its own store, whichever store the top bar shows.
+  const effectiveStoreId = editing?.storeId ?? storeId ?? user.storeId ?? stores[0]?.id ?? null;
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState<number | null>(null);
@@ -161,19 +177,58 @@ export default function KasirClient() {
     refreshHeld();
   }
 
+  // ?edit= fills the form with that PO: its customer, items, quantities, discounts and PPN.
+  useEffect(() => {
+    if (!editId) return;
+    let stale = false;
+    api
+      .get<EditSource>(`/api/orders${qs({ id: editId })}`)
+      .then((o) => {
+        if (stale) return;
+        if (o.status !== "UNPAID" || o.isDelivered) {
+          setError(`PO ${o.code} sudah dikirim, ditagih atau dibatalkan, jadi tidak bisa diubah lagi.`);
+          router.replace("/kasir");
+          return;
+        }
+        setEditing({ id: o.id, code: o.code, storeId: o.storeId });
+        setCart(o.items.map((l) => ({ itemId: l.itemId, qty: l.qty, discount: l.discount })));
+        setCustomerId(o.customer?.id ?? null);
+        setTaxOn(o.tax > 0);
+      })
+      .catch((err) => {
+        if (!stale) setError(err instanceof Error ? err.message : "Gagal memuat PO.");
+      });
+    return () => {
+      stale = true;
+    };
+  }, [editId, router]);
+
+  /** Back to taking new POs; the one being edited keeps whatever was last saved. */
+  function exitEdit() {
+    setEditing(null);
+    setCart([]);
+    setCustomerId(null);
+    setTaxOn(true);
+    router.replace("/kasir");
+  }
+
   async function submit() {
     if (!effectiveStoreId || !cart.length) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await postOrder({
-        storeId: effectiveStoreId, customerId,
-        taxEnabled: taxOn, taxRate: TAX_RATE,
-        lines: cart.map((l) => ({ itemId: l.itemId, qty: l.qty, discount: l.discount })),
-      });
+      const result = await saveOrder(
+        {
+          storeId: effectiveStoreId, customerId,
+          taxEnabled: taxOn, taxRate: TAX_RATE,
+          lines: cart.map((l) => ({ itemId: l.itemId, qty: l.qty, discount: l.discount })),
+        },
+        editing?.id
+      );
       setSlip(result);
       setCart([]);
       setDialog("slip");
+      if (editing) exitEdit();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal menyimpan PO.");
     } finally {
@@ -186,7 +241,8 @@ export default function KasirClient() {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setDialog(null);
       if (e.key === "F2") { e.preventDefault(); setDialog("check"); }
-      if (e.key === "F3") { e.preventDefault(); hold(); }
+      // A PO being edited is saved over itself, never parked as a new cart.
+      if (e.key === "F3") { e.preventDefault(); if (!editing) hold(); }
       if (e.key === "F6") { e.preventDefault(); setDialog("cust"); }
       if (e.key === "F12") { e.preventDefault(); if (cart.length) setDialog("confirm"); }
     }
@@ -234,7 +290,7 @@ export default function KasirClient() {
             <button className="btn btn-secondary h-12" onClick={() => setDialog("check")}>
               <span className="text-[11px] text-slate-6">F2</span> Cek Harga
             </button>
-            <button className="btn btn-secondary h-12" onClick={hold} disabled={!cart.length}>
+            <button className="btn btn-secondary h-12" onClick={hold} disabled={!cart.length || editing !== null}>
               <span className="text-[11px] text-slate-6">F3</span> Tahan
             </button>
           </div>
@@ -291,6 +347,14 @@ export default function KasirClient() {
 
       {/* RIGHT — customer, cart list, totals */}
       <div className="flex h-full min-w-0 max-w-[480px] flex-[1_1_320px] flex-col overflow-hidden bg-surface">
+        {editing && (
+          <div className="flex flex-none items-center justify-between gap-2.5 bg-amber-200 px-5 py-2 text-[13px] font-semibold text-amber-700">
+            <span>Mengubah {editing.code}</span>
+            <button className="btn btn-ghost px-1.5 py-0.5 text-xs" onClick={exitEdit}>
+              Batal ubah
+            </button>
+          </div>
+        )}
         <div className="flex-none border-b-2 border-divider px-5 py-3">
           <div className="mb-1.5 flex items-center justify-between gap-2.5">
             <span className="label-kicker">Pelanggan / Customer</span>
@@ -406,11 +470,13 @@ export default function KasirClient() {
               onClick={() => setDialog("confirm")}
               disabled={!cart.length}
             >
-              <span>SIMPAN PO <span className="text-[13px] font-normal opacity-75">F12</span></span>
+              <span>
+                {editing ? "SIMPAN PERUBAHAN" : "SIMPAN PO"} <span className="text-[13px] font-normal opacity-75">F12</span>
+              </span>
               <span>{rp(totals.total)}</span>
             </button>
             <div className="flex gap-1.5">
-              {(held?.length ?? 0) > 0 && (
+              {(held?.length ?? 0) > 0 && !editing && (
                 <button className="btn btn-secondary h-8 flex-1 justify-center gap-1.5 text-xs" onClick={() => setDialog("held")}>
                   <Pause size={13} /> Ditahan <span className="tag tag-neutral">{held?.length}</span>
                 </button>
@@ -431,7 +497,7 @@ export default function KasirClient() {
       <Modal
         open={dialog === "confirm"}
         onClose={() => setDialog(null)}
-        title="Simpan purchase order (PO)"
+        title={editing ? `Simpan perubahan ${editing.code}` : "Simpan purchase order (PO)"}
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setDialog(null)}>Batal (Esc)</button>
@@ -464,6 +530,12 @@ export default function KasirClient() {
           {!customer && (
             <p className="m-0 text-[13px] text-amber-700">
               Tanpa pelanggan, surat jalannya tidak beralamat. Pilih pelanggan (F6) bila barang diantar.
+            </p>
+          )}
+          {editing && (
+            <p className="m-0 bg-amber-200 px-3.5 py-3 text-[13px] text-amber-700">
+              Isi {editing.code} diganti dengan keranjang ini, dihitung dengan harga yang berlaku sekarang. Nomor
+              dan tanggal PO tetap.
             </p>
           )}
           <p className="m-0 bg-bg px-3.5 py-3 text-[13px] text-slate-8">
