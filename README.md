@@ -73,7 +73,9 @@ Barcode scanning · receipt print preview · cash-drawer shift open/close with e
 src/
   app/
     (app)/              authenticated shell — one folder per screen
-      kasir/            cashier: scanner, quick-pick, cart, payment, receipt
+      kasir/            purchase order (PO): scanner, quick-pick, cart, PO slip
+      pengiriman/       delivery of POs, one surat jalan per customer
+      invoice/          "Buat Invoice": bills a delivered PO for what the customer received
       pembelian/        purchasing: unit conversion + new selling prices
       retur/            sale & supplier returns
       barang/ harga/    items + the store × member price matrix
@@ -98,11 +100,19 @@ prisma/
   seed.ts               realistic demo data
 ```
 
+### Sales flow: PO → pengiriman → invoice
+
+1. **Kasir** takes a purchase order (`Order` + `OrderItem`, status `UNPAID`). Prices are resolved as before; stock does not move yet, but stock promised to other open POs can't be ordered again.
+2. **Pengiriman** puts POs on a vehicle trip and prints one surat jalan per customer (`Order.isDelivered`, `Order.deliveryNoteId`).
+3. **Buat Invoice** picks a delivered, unpaid PO and bills what the customer actually received: qty (at most what was ordered), price (changing it needs `price.manage`), per-line discount and PPN. Posting writes the `Sale` + `SaleLine` (`Sale.orderId`, one invoice per PO), lowers stock, snapshots COGS, awards points and marks the PO `PAID`. Goods not received came back on the truck and never left stock.
+
+An unpaid PO can be cancelled (`VOID`) from Riwayat PO; a delivery can be cancelled until one of its POs is invoiced.
+
 ### Two rules worth knowing
 
 **1. Stock only changes through `applyMovement()`.** It updates `ItemStock` and writes a `StockMovement` row with the resulting balance, in the same transaction as the document that caused it. The ledger and the balance can never disagree.
 
-**2. COGS is snapshotted at sale time.** `SaleLine.unitCost` stores the moving-average cost when the sale was posted, so changing a purchase price next month never rewrites last month's profit.
+**2. COGS is snapshotted at invoice time.** `SaleLine.unitCost` stores the moving-average cost when the invoice was posted, so changing a purchase price next month never rewrites last month's profit.
 
 ### API shape
 
@@ -116,7 +126,10 @@ Every endpoint returns `{ ok: true, data }` or `{ ok: false, error }`. Auth is a
 | GET/POST/PATCH | `/api/customers` · `/api/suppliers` | |
 | GET/POST | `/api/categories` · `/api/units` · `/api/stores` | |
 | GET | `/api/stock` (+`?card=1` for kartu stok) | |
-| GET/POST | `/api/sales` · `/api/purchases` · `/api/returns` | posting moves stock |
+| GET/POST/DELETE | `/api/orders` | PO from the kasir; DELETE cancels an unpaid PO |
+| GET/POST/DELETE | `/api/deliveries` | pengiriman of POs + surat jalan; DELETE cancels it |
+| GET/POST | `/api/sales` | invoice of a delivered PO; posting moves stock |
+| GET/POST | `/api/purchases` · `/api/returns` | posting moves stock |
 | GET/POST | `/api/transfers` · `/api/opname` · `/api/shifts` | |
 | GET/POST/DELETE | `/api/held-sales` | parked carts |
 | GET | `/api/price-check` | price across all stores |
@@ -127,7 +140,7 @@ Every endpoint returns `{ ok: true, data }` or `{ ok: false, error }`. Auth is a
 
 ## Keyboard shortcuts (cashier)
 
-`F2` price check · `F3` hold sale · `F6` choose customer · `F12` pay · `Esc` close dialog
+`F2` price check · `F3` hold sale · `F6` choose customer · `F12` save PO · `Esc` close dialog
 
 ---
 

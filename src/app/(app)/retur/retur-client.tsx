@@ -92,14 +92,14 @@ export default function ReturClient() {
           ))}
         </div>
         <div className="field min-w-[240px]">
-          <label htmlFor="struk">Nomor struk / faktur</label>
+          <label htmlFor="struk">Nomor invoice / struk</label>
           <input
             id="struk"
             className="input h-11 text-base font-semibold"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && setQuery(code.trim())}
-            placeholder="TRX-000123"
+            placeholder="INV-2610-0001"
           />
         </div>
         <button className="btn btn-secondary h-11" onClick={() => setQuery(code.trim())}>

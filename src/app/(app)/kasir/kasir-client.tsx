@@ -20,17 +20,17 @@ type ItemRow = {
 
 type CustomerRow = { id: number; code: string; name: string; tier: string; phone: string | null; points: number };
 type CartLine = { itemId: number; qty: number; discount: number };
-type Receipt = Awaited<ReturnType<typeof postSale>>;
+type Slip = Awaited<ReturnType<typeof postOrder>>;
 
-async function postSale(body: unknown) {
+/** The kasir takes a purchase order: paid later, by the invoice made once it is delivered. */
+async function postOrder(body: unknown) {
   return api.post<{
     id: number; code: string; date: string;
     store: { name: string; address: string | null; phone: string | null };
-    customer: { name: string; code: string; points: number } | null;
+    customer: { name: string; code: string } | null;
     cashier: string; subtotal: number; discount: number; tax: number; total: number;
-    paid: number; change: number; paymentMethod: string; pointsEarned: number;
     lines: { name: string; code: string; unit: string; qty: number; unitPrice: number; discount: number; total: number; isMember: boolean }[];
-  }>("/api/sales", body);
+  }>("/api/orders", body);
 }
 
 const TAX_RATE = 11;
@@ -44,17 +44,15 @@ export default function KasirClient() {
   const [taxOn, setTaxOn] = useState(true);
   const [category, setCategory] = useState<string>("Semua");
   const [scan, setScan] = useState("");
-  const [dialog, setDialog] = useState<null | "pay" | "cust" | "check" | "receipt" | "held">(null);
-  const [payMethod, setPayMethod] = useState<"CASH" | "QRIS" | "CARD" | "SPLIT">("CASH");
-  const [tender, setTender] = useState(0);
-  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [dialog, setDialog] = useState<null | "confirm" | "cust" | "check" | "slip" | "held">(null);
+  const [slip, setSlip] = useState<Slip | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkQ, setCheckQ] = useState("");
   const scanRef = useRef<HTMLInputElement>(null);
 
   const itemsUrl = effectiveStoreId ? `/api/items${qs({ storeId: effectiveStoreId })}` : null;
-  const { data: items, loading, refresh } = useFetch<ItemRow[]>(itemsUrl, [effectiveStoreId]);
+  const { data: items, loading } = useFetch<ItemRow[]>(itemsUrl, [effectiveStoreId]);
   const { data: customers } = useFetch<CustomerRow[]>("/api/customers");
   const { data: held, refresh: refreshHeld } = useFetch<
     { id: number; label: string; total: number; customer: string; createdAt: string; payload: CartLine[] }[]
@@ -162,37 +160,34 @@ export default function KasirClient() {
     refreshHeld();
   }
 
-  async function pay() {
+  async function submit() {
     if (!effectiveStoreId || !cart.length) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await postSale({
+      const result = await postOrder({
         storeId: effectiveStoreId, customerId,
         taxEnabled: taxOn, taxRate: TAX_RATE,
-        paymentMethod: payMethod,
-        paid: tender || totals.total,
         lines: cart.map((l) => ({ itemId: l.itemId, qty: l.qty, discount: l.discount })),
       });
-      setReceipt(result);
+      setSlip(result);
       setCart([]);
-      setDialog("receipt");
-      refresh();
+      setDialog("slip");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menyimpan transaksi.");
+      setError(err instanceof Error ? err.message : "Gagal menyimpan PO.");
     } finally {
       setBusy(false);
     }
   }
 
-  // Keyboard shortcuts — F2 price check, F3 hold, F6 customer, F12 pay.
+  // Keyboard shortcuts — F2 price check, F3 hold, F6 customer, F12 save the PO.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setDialog(null);
       if (e.key === "F2") { e.preventDefault(); setDialog("check"); }
       if (e.key === "F3") { e.preventDefault(); hold(); }
       if (e.key === "F6") { e.preventDefault(); setDialog("cust"); }
-      if (e.key === "F12") { e.preventDefault(); if (cart.length) { setTender(0); setDialog("pay"); } }
+      if (e.key === "F12") { e.preventDefault(); if (cart.length) setDialog("confirm"); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -206,7 +201,7 @@ export default function KasirClient() {
   const tiles = (items ?? []).filter((i) => category === "Semua" || i.category.name === category);
 
   if (!effectiveStoreId) {
-    return <EmptyState title="Pilih satu toko untuk mulai berjualan." />;
+    return <EmptyState title="Pilih satu toko untuk mulai membuat PO." />;
   }
 
   return (
@@ -320,7 +315,7 @@ export default function KasirClient() {
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex flex-none items-center justify-between gap-2.5 px-5 pb-2 pt-3">
             <span className="label-kicker">
-              Barang dibeli / Items <span className="text-ink">({lines.length})</span>
+              Barang dipesan / Items <span className="text-ink">({lines.length})</span>
             </span>
             <button className="btn btn-ghost px-1.5 py-0.5 text-xs" onClick={() => setCart([])} disabled={!cart.length}>
               Kosongkan
@@ -407,10 +402,10 @@ export default function KasirClient() {
           <div className="mt-0.5 flex flex-col gap-1.5">
             <button
               className="btn btn-primary h-14 w-full justify-between px-5 text-lg"
-              onClick={() => { setTender(0); setDialog("pay"); }}
+              onClick={() => setDialog("confirm")}
               disabled={!cart.length}
             >
-              <span>BAYAR <span className="text-[13px] font-normal opacity-75">F12</span></span>
+              <span>SIMPAN PO <span className="text-[13px] font-normal opacity-75">F12</span></span>
               <span>{rp(totals.total)}</span>
             </button>
             <div className="flex gap-1.5">
@@ -421,76 +416,59 @@ export default function KasirClient() {
               )}
               <button
                 className="btn btn-secondary h-8 flex-1 justify-center text-xs"
-                onClick={() => receipt && setDialog("receipt")}
-                disabled={!receipt}
+                onClick={() => slip && setDialog("slip")}
+                disabled={!slip}
               >
-                Struk terakhir
+                PO terakhir
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Payment */}
+      {/* Confirm the PO */}
       <Modal
-        open={dialog === "pay"}
+        open={dialog === "confirm"}
         onClose={() => setDialog(null)}
-        title="Pembayaran / Payment"
+        title="Simpan purchase order (PO)"
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setDialog(null)}>Batal (Esc)</button>
-            <button className="btn btn-primary h-11 px-5 text-base" onClick={pay} disabled={busy}>
-              {busy ? "Menyimpan…" : "Selesai & Cetak Struk"}
+            <button className="btn btn-primary h-11 px-5 text-base" onClick={submit} disabled={busy}>
+              {busy ? "Menyimpan…" : "Simpan & Cetak PO"}
             </button>
           </>
         }
       >
         <div className="flex flex-col gap-4">
+          {error && (
+            <div role="alert" className="bg-brand-100 px-3 py-2 text-sm font-semibold text-brand-800">{error}</div>
+          )}
           <div className="flex items-baseline justify-between border-y-2 border-divider py-3.5">
-            <span className="label-kicker">Total tagihan</span>
+            <span className="label-kicker">Total PO</span>
             <span className="text-4xl font-extrabold leading-none">{rp(totals.total)}</span>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {(["CASH", "QRIS", "CARD", "SPLIT"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => { setPayMethod(m); if (m !== "CASH") setTender(totals.total); }}
-                className={clsx(
-                  "flex-[1_1_120px] px-3 py-3 text-sm font-semibold ring-1 ring-divider transition-colors",
-                  payMethod === m ? "bg-ink text-white" : "bg-white hover:bg-slate-2"
-                )}
-              >
-                {{ CASH: "Tunai", QRIS: "QRIS", CARD: "Kartu Debit", SPLIT: "Gabungan" }[m]}
-              </button>
-            ))}
-          </div>
-
-          <div className="field">
-            <label htmlFor="tender">Uang diterima / Tendered</label>
-            <input
-              id="tender"
-              inputMode="numeric"
-              className="input h-14 text-right text-2xl font-extrabold"
-              value={tender ? num(tender) : ""}
-              placeholder="0"
-              onChange={(e) => setTender(Number(e.target.value.replace(/\D/g, "")) || 0)}
-            />
-            <div className="mt-2 flex flex-wrap gap-2">
-              {[totals.total, 50000, 100000, 150000, 200000].map((v, i) => (
-                <button key={i} className="btn btn-secondary h-10 flex-[1_1_90px] justify-center" onClick={() => setTender(v)}>
-                  {i === 0 ? "Uang pas" : num(v)}
-                </button>
-              ))}
+          <div className="flex flex-col gap-1.5 text-sm">
+            <div className="flex justify-between gap-3">
+              <span>Pelanggan</span>
+              <span className="text-right font-semibold">{customer?.name ?? "Pelanggan Umum"}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Barang</span>
+              <span className="font-semibold">{lines.length} jenis</span>
             </div>
           </div>
 
-          <div className="flex items-baseline justify-between bg-bg px-3.5 py-3">
-            <span className="text-[13px] font-semibold">Kembalian / Change</span>
-            <span className={clsx("text-2xl font-extrabold", tender >= totals.total ? "text-ink" : "text-amber-700")}>
-              {rp(Math.max(0, tender - totals.total))}
-            </span>
-          </div>
+          {!customer && (
+            <p className="m-0 text-[13px] text-amber-700">
+              Tanpa pelanggan, surat jalannya tidak beralamat. Pilih pelanggan (F6) bila barang diantar.
+            </p>
+          )}
+          <p className="m-0 bg-bg px-3.5 py-3 text-[13px] text-slate-8">
+            PO ini belum dibayar. Barangnya dikirim lewat menu Pengiriman, lalu tagihannya dibuat di menu Buat
+            Invoice sesuai barang yang diterima pelanggan.
+          </p>
         </div>
       </Modal>
 
@@ -597,11 +575,11 @@ export default function KasirClient() {
         </div>
       </Modal>
 
-      {/* Receipt */}
+      {/* PO slip */}
       <Modal
-        open={dialog === "receipt"}
+        open={dialog === "slip"}
         onClose={() => setDialog(null)}
-        title="Struk / Receipt"
+        title="Purchase order (PO)"
         width="380px"
         footer={
           <>
@@ -610,17 +588,18 @@ export default function KasirClient() {
           </>
         }
       >
-        {receipt && (
+        {slip && (
           <div className="font-mono text-xs leading-relaxed ring-1 ring-divider p-4">
             <div className="text-center font-bold tracking-widest">KASAKU</div>
-            <div className="text-center">{receipt.store.name}</div>
-            <div className="text-center">{receipt.store.address}</div>
+            <div className="text-center">{slip.store.name}</div>
+            <div className="text-center">{slip.store.address}</div>
             <div className="my-2 border-t border-dashed border-slate-5" />
-            <div className="flex justify-between"><span>No. {receipt.code}</span><span>{new Date(receipt.date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span></div>
-            <div className="flex justify-between"><span>Kasir</span><span>{receipt.cashier}</span></div>
-            <div className="flex justify-between"><span>Pelanggan</span><span>{receipt.customer?.name ?? "Umum"}</span></div>
+            <div className="text-center font-bold tracking-widest">PURCHASE ORDER</div>
+            <div className="flex justify-between"><span>No. {slip.code}</span><span>{new Date(slip.date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span></div>
+            <div className="flex justify-between"><span>Kasir</span><span>{slip.cashier}</span></div>
+            <div className="flex justify-between"><span>Pelanggan</span><span>{slip.customer?.name ?? "Umum"}</span></div>
             <div className="my-2 border-t border-dashed border-slate-5" />
-            {receipt.lines.map((l, i) => (
+            {slip.lines.map((l, i) => (
               <div key={i} className="mb-1">
                 <div>{l.name}</div>
                 <div className="flex justify-between">
@@ -630,16 +609,12 @@ export default function KasirClient() {
               </div>
             ))}
             <div className="my-2 border-t border-dashed border-slate-5" />
-            <div className="flex justify-between"><span>Subtotal</span><span>{rp(receipt.subtotal)}</span></div>
-            <div className="flex justify-between"><span>Diskon</span><span>-{rp(receipt.discount)}</span></div>
-            <div className="flex justify-between"><span>PPN {TAX_RATE}%</span><span>{rp(receipt.tax)}</span></div>
-            <div className="mt-1 flex justify-between text-sm font-bold"><span>TOTAL</span><span>{rp(receipt.total)}</span></div>
-            <div className="flex justify-between"><span>{receipt.paymentMethod}</span><span>{rp(receipt.paid)}</span></div>
-            <div className="flex justify-between"><span>Kembali</span><span>{rp(receipt.change)}</span></div>
+            <div className="flex justify-between"><span>Subtotal</span><span>{rp(slip.subtotal)}</span></div>
+            <div className="flex justify-between"><span>Diskon</span><span>-{rp(slip.discount)}</span></div>
+            <div className="flex justify-between"><span>PPN {TAX_RATE}%</span><span>{rp(slip.tax)}</span></div>
+            <div className="mt-1 flex justify-between text-sm font-bold"><span>TOTAL</span><span>{rp(slip.total)}</span></div>
             <div className="my-2 border-t border-dashed border-slate-5" />
-            <div className="text-center">
-              {receipt.customer ? `Poin terkumpul: ${num(receipt.customer.points)}` : "Daftar member, dapat harga khusus"}
-            </div>
+            <div className="text-center">BELUM DIBAYAR — invoice menyusul sesuai barang yang diterima.</div>
             <div className="mt-1.5 text-center">Terima kasih — Thank you</div>
           </div>
         )}

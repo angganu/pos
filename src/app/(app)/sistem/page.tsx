@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 export default async function SistemPage() {
   await requireUser();
 
-  const [stores, users, items, sales, purchases, movements, lastSale] = await Promise.all([
-    prisma.store.count(), prisma.user.count(), prisma.item.count(),
+  const [stores, users, items, orders, sales, purchases, movements, lastSale] = await Promise.all([
+    prisma.store.count(), prisma.user.count(), prisma.item.count(), prisma.order.count(),
     prisma.sale.count(), prisma.purchase.count(), prisma.stockMovement.count(),
     prisma.sale.findFirst({ orderBy: { date: "desc" }, select: { date: true, code: true } }),
   ]);
@@ -22,7 +22,8 @@ export default async function SistemPage() {
     ["Jumlah toko", String(stores)],
     ["Jumlah pengguna", String(users)],
     ["Jumlah barang", String(items)],
-    ["Transaksi penjualan", String(sales)],
+    ["Purchase order (PO)", String(orders)],
+    ["Invoice penjualan", String(sales)],
     ["Faktur pembelian", String(purchases)],
     ["Baris kartu stok", String(movements)],
     ["Transaksi terakhir", lastSale ? `${lastSale.code} · ${fdatetime(lastSale.date)}` : "—"],

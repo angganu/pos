@@ -9,14 +9,14 @@ import { mergeLines, type DeliveryLine } from "@/lib/delivery";
 
 type Customer = { id: number; code: string; name: string; address: string | null; phone: string | null };
 
-type Invoice = { id: number; code: string; date: string; cashier: string; lines: DeliveryLine[] };
+type Order = { id: number; code: string; date: string; createdBy: string; lines: DeliveryLine[] };
 
 type Detail = {
   id: number; code: string; date: string; note: string | null; createdBy: string;
   store: { name: string; address: string | null; phone: string | null };
   vehicle: { vehicleNo: string; vehicleType: string };
   driver: string | null; driverAssistance: string | null;
-  notes: { id: number; code: string; customer: Customer | null; invoices: Invoice[] }[];
+  notes: { id: number; code: string; customer: Customer | null; orders: Order[] }[];
 };
 
 type Note = Detail["notes"][number];
@@ -82,7 +82,7 @@ export default function SuratJalanClient({ id, noteId }: { id: number; noteId: n
         notes.map((n) => (
           <Fragment key={n.id}>
             <Sheet delivery={data} note={n} />
-            <InvoiceDetails delivery={data} note={n} />
+            <OrderDetails delivery={data} note={n} />
           </Fragment>
         ))}
     </div>
@@ -90,7 +90,7 @@ export default function SuratJalanClient({ id, noteId }: { id: number; noteId: n
 }
 
 function Sheet({ delivery: d, note: n }: { delivery: Detail; note: Note }) {
-  const items = mergeLines(n.invoices);
+  const items = mergeLines(n.orders);
   const c = n.customer;
 
   return (
@@ -127,9 +127,9 @@ function Sheet({ delivery: d, note: n }: { delivery: Detail; note: Note }) {
           <Field label="Sopir" value={d.driver ?? "—"} />
           <Field label="Kenek" value={d.driverAssistance ?? "—"} />
         </Box>
-        <Box title={`Faktur penjualan (${n.invoices.length})`}>
-          {n.invoices.map((inv) => (
-            <Field key={inv.id} label={inv.code} value={fdate(inv.date)} labelStrong />
+        <Box title={`Purchase order (${n.orders.length})`}>
+          {n.orders.map((o) => (
+            <Field key={o.id} label={o.code} value={fdate(o.date)} labelStrong />
           ))}
         </Box>
       </section>
@@ -164,8 +164,8 @@ function Sheet({ delivery: d, note: n }: { delivery: Detail; note: Note }) {
           <tfoot>
             <tr>
               <td colSpan={6} className="text-[7pt] text-slate-7">
-                {items.length} jenis barang, gabungan dari {n.invoices.length} faktur. Rincian per faktur ada di
-                halaman lampiran.
+                {items.length} jenis barang, gabungan dari {n.orders.length} PO. Rincian per PO ada di halaman
+                lampiran.
               </td>
             </tr>
           </tfoot>
@@ -199,8 +199,8 @@ function Sheet({ delivery: d, note: n }: { delivery: Detail; note: Note }) {
   );
 }
 
-/** The surat jalan's attachment: each invoice's own lines, starting on a fresh page. */
-function InvoiceDetails({ delivery: d, note: n }: { delivery: Detail; note: Note }) {
+/** The surat jalan's attachment: each PO's own lines, starting on a fresh page. */
+function OrderDetails({ delivery: d, note: n }: { delivery: Detail; note: Note }) {
   return (
     <article className={PAPER}>
       <header className="flex items-start justify-between gap-6 border-b-2 border-ink pb-2">
@@ -209,7 +209,7 @@ function InvoiceDetails({ delivery: d, note: n }: { delivery: Detail; note: Note
           <div className={`${LINE} font-semibold`}>{d.store.name}</div>
         </div>
         <div className="flex-none text-right">
-          <div className="text-[11pt] font-extrabold leading-none tracking-[0.08em]">RINCIAN PER FAKTUR</div>
+          <div className="text-[11pt] font-extrabold leading-none tracking-[0.08em]">RINCIAN PER PO</div>
           <div className="mt-0.5 text-slate-7">Lampiran surat jalan</div>
           <MetaList
             rows={[
@@ -222,15 +222,15 @@ function InvoiceDetails({ delivery: d, note: n }: { delivery: Detail; note: Note
       </header>
 
       <p className={`${LINE} mb-2 mt-2.5 text-slate-7`}>
-        {n.invoices.length} faktur yang jumlahnya digabung di surat jalan {n.code}.
+        {n.orders.length} PO yang jumlahnya digabung di surat jalan {n.code}.
       </p>
 
-      {n.invoices.map((inv) => (
-        <div key={inv.id} className="mb-2.5 break-inside-avoid">
+      {n.orders.map((o) => (
+        <div key={o.id} className="mb-2.5 break-inside-avoid">
           <div className="flex justify-between gap-3 whitespace-nowrap bg-slate-2 px-1.5 py-[3px] text-[7.5pt]">
-            <span className="font-bold">{inv.code}</span>
+            <span className="font-bold">{o.code}</span>
             <span className={LINE}>
-              {fdate(inv.date)} · Kasir {inv.cashier}
+              {fdate(o.date)} · Kasir {o.createdBy}
             </span>
           </div>
           <table className={`${TABLE} text-[7.5pt] [&_td]:border-slate-5 [&_th]:border-slate-5`}>
@@ -244,7 +244,7 @@ function InvoiceDetails({ delivery: d, note: n }: { delivery: Detail; note: Note
               </tr>
             </thead>
             <tbody>
-              {inv.lines.map((l, i) => (
+              {o.lines.map((l, i) => (
                 <tr key={i}>
                   <td>{i + 1}</td>
                   <td>{l.code}</td>

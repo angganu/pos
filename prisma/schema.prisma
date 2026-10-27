@@ -44,6 +44,13 @@ enum DocStatus {
   VOID
 }
 
+/// UNPAID until its invoice (Sale) is made, then PAID. VOID = cancelled.
+enum OrderStatus {
+  UNPAID
+  PAID
+  VOID
+}
+
 enum TransferStatus {
   DRAFT
   SENT
@@ -64,6 +71,7 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   store      Store?          @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  orders     Order[]
   sales      Sale[]
   purchases  Purchase[]
   returns    ReturnDoc[]
@@ -93,6 +101,7 @@ model Store {
   users         User[]
   stocks        ItemStock[]
   prices        ItemPrice[]
+  orders        Order[]
   sales         Sale[]
   purchases     Purchase[]
   returns       ReturnDoc[]
@@ -119,6 +128,7 @@ model Customer {
   updatedAt DateTime @updatedAt
 
   prices        ItemPrice[]
+  orders        Order[]
   sales         Sale[]
   heldSales     HeldSale[]
   deliveryNotes DeliveryNote[]
@@ -199,6 +209,7 @@ model Item {
   itemUnits  ItemUnit[]
   stocks     ItemStock[]
   prices     ItemPrice[]
+  orderItems OrderItem[]
   saleLines  SaleLine[]
   purchLines PurchaseLine[]
   retLines   ReturnLine[]
@@ -357,47 +368,100 @@ model RejectLine {
   @@index([itemId])
 }
 
-model Sale {
-  id             Int           @id @default(autoincrement())
-  code           String        @unique @db.VarChar(40)
+/// Purchase order (PO) — what a customer orders at the kasir; the Sale's columns
+/// without the payment, COGS and points, which only exist once it is invoiced.
+/// Flow: PO -> pengiriman (surat jalan) -> invoice (Sale) for what the customer received.
+/// Stock does not move here; it leaves with the invoice.
+model Order {
+  id             Int         @id @default(autoincrement())
+  code           String      @unique @db.VarChar(40)
   storeId        Int
   customerId     Int?
   userId         Int
-  shiftId        Int?
-  date           DateTime      @default(now())
-  subtotal       Decimal       @default(0) @db.Decimal(18, 2)
-  discount       Decimal       @default(0) @db.Decimal(18, 2)
-  tax            Decimal       @default(0) @db.Decimal(18, 2)
-  total          Decimal       @default(0) @db.Decimal(18, 2)
-  cogs           Decimal       @default(0) @db.Decimal(18, 2)
-  paid           Decimal       @default(0) @db.Decimal(18, 2)
-  change         Decimal       @default(0) @db.Decimal(18, 2)
-  paymentMethod  PaymentMethod @default(CASH)
-  paymentMeta    Json?
-  pointsEarned   Int           @default(0)
-  status         DocStatus     @default(POSTED)
+  date           DateTime    @default(now())
+  subtotal       Decimal     @default(0) @db.Decimal(18, 2)
+  discount       Decimal     @default(0) @db.Decimal(18, 2)
+  tax            Decimal     @default(0) @db.Decimal(18, 2)
+  total          Decimal     @default(0) @db.Decimal(18, 2)
+  status         OrderStatus @default(UNPAID)
   /// Goods have left the store. Set by a delivery (pengiriman), cleared if it is cancelled.
-  isDelivered    Boolean       @default(false) @map("is_delivered")
-  /// The surat jalan that carried this sale.
+  isDelivered    Boolean     @default(false) @map("is_delivered")
+  /// The surat jalan that carried this order.
   deliveryNoteId Int?
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime    @default(now())
 
   store        Store         @relation(fields: [storeId], references: [id])
   customer     Customer?     @relation(fields: [customerId], references: [id])
   user         User          @relation(fields: [userId], references: [id])
-  shift        Shift?        @relation(fields: [shiftId], references: [id])
   deliveryNote DeliveryNote? @relation(fields: [deliveryNoteId], references: [id], onDelete: SetNull)
-  lines        SaleLine[]
-  returns      ReturnDoc[]
+  items        OrderItem[]
+  /// The invoice made from it once delivered.
+  sale         Sale?
+
+  @@index([storeId, date])
+  @@index([customerId])
+  @@index([storeId, status, isDelivered])
+  @@index([deliveryNoteId])
+}
+
+/// One ordered item, in the item's base unit, priced as resolved when ordered.
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  itemId    Int
+  qty       Decimal @db.Decimal(18, 4)
+  unitPrice Decimal @db.Decimal(18, 4)
+  basePrice Decimal @db.Decimal(18, 4)
+  discount  Decimal @default(0) @db.Decimal(18, 2)
+  total     Decimal @db.Decimal(18, 2)
+  isMember  Boolean @default(false)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item  Item  @relation(fields: [itemId], references: [id])
+
+  @@index([orderId])
+  @@index([itemId])
+}
+
+/// Invoice — the fixed transaction for what the customer received of one
+/// delivered order. Stock leaves, COGS is snapshotted and points are earned here.
+model Sale {
+  id            Int           @id @default(autoincrement())
+  code          String        @unique @db.VarChar(40)
+  /// The PO this invoice bills; one invoice per PO.
+  orderId       Int?          @unique
+  storeId       Int
+  customerId    Int?
+  userId        Int
+  shiftId       Int?
+  date          DateTime      @default(now())
+  subtotal      Decimal       @default(0) @db.Decimal(18, 2)
+  discount      Decimal       @default(0) @db.Decimal(18, 2)
+  tax           Decimal       @default(0) @db.Decimal(18, 2)
+  total         Decimal       @default(0) @db.Decimal(18, 2)
+  cogs          Decimal       @default(0) @db.Decimal(18, 2)
+  paid          Decimal       @default(0) @db.Decimal(18, 2)
+  change        Decimal       @default(0) @db.Decimal(18, 2)
+  paymentMethod PaymentMethod @default(CASH)
+  paymentMeta   Json?
+  pointsEarned  Int           @default(0)
+  status        DocStatus     @default(POSTED)
+  createdAt     DateTime      @default(now())
+
+  order    Order?      @relation(fields: [orderId], references: [id])
+  store    Store       @relation(fields: [storeId], references: [id])
+  customer Customer?   @relation(fields: [customerId], references: [id])
+  user     User        @relation(fields: [userId], references: [id])
+  shift    Shift?      @relation(fields: [shiftId], references: [id])
+  lines    SaleLine[]
+  returns  ReturnDoc[]
 
   @@index([storeId, date])
   @@index([customerId])
   @@index([shiftId])
-  @@index([storeId, isDelivered])
-  @@index([deliveryNoteId])
 }
 
-/// Pengiriman — one vehicle trip taking paid sales to their customers.
+/// Pengiriman — one vehicle trip taking purchase orders to their customers.
 /// Driver names are copied from the vehicle when the trip is made, so a later
 /// change in the vehicle master doesn't rewrite who drove it.
 model Delivery {
@@ -422,7 +486,7 @@ model Delivery {
 }
 
 /// Surat jalan — one per customer on a delivery; its items are that customer's
-/// sales merged per item. A walk-in sale (no customer) gets a surat jalan of its own.
+/// orders merged per item. A walk-in order (no customer) gets a surat jalan of its own.
 model DeliveryNote {
   id         Int    @id @default(autoincrement())
   code       String @unique @db.VarChar(40)
@@ -431,7 +495,7 @@ model DeliveryNote {
 
   delivery Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id])
-  sales    Sale[]
+  orders   Order[]
 
   @@index([deliveryId])
   @@index([customerId])

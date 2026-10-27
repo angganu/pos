@@ -45,19 +45,41 @@ export async function applyMovement(
   return balanceAfter;
 }
 
-/** Throws when a store does not have enough stock to cover an outgoing qty. */
+/**
+ * Throws when a store does not have enough stock to cover an outgoing qty.
+ * `reserved` is stock already promised to open POs, so not free for this one.
+ */
 export async function assertStockAvailable(
   tx: Prisma.TransactionClient,
   itemId: number,
   storeId: number,
-  needed: number
+  needed: number,
+  reserved = 0
 ) {
   const row = await tx.itemStock.findUnique({ where: { itemId_storeId: { itemId, storeId } } });
-  const have = row ? dec(row.stock) : 0;
+  const have = round4((row ? dec(row.stock) : 0) - reserved);
   if (have < needed) {
     const item = await tx.item.findUnique({ where: { id: itemId }, select: { name: true } });
-    throw new Error(`Stok tidak cukup untuk ${item?.name ?? `#${itemId}`}: tersedia ${have}, diminta ${needed}`);
+    const held = reserved ? ` (${reserved} lagi sudah dipesan di PO lain)` : "";
+    throw new Error(`Stok tidak cukup untuk ${item?.name ?? `#${itemId}`}: tersedia ${have}${held}, diminta ${needed}`);
   }
+}
+
+/**
+ * Stock promised to open POs, per item: ordered but not invoiced yet. It is still
+ * counted in ItemStock — stock only leaves with the invoice — but no longer free to order.
+ */
+export async function reservedQty(
+  tx: Prisma.TransactionClient,
+  storeId: number,
+  itemIds: number[]
+): Promise<Map<number, number>> {
+  const rows = await tx.orderItem.groupBy({
+    by: ["itemId"],
+    where: { itemId: { in: itemIds }, order: { storeId, status: "UNPAID" } },
+    _sum: { qty: true },
+  });
+  return new Map(rows.map((r) => [r.itemId, dec(r._sum.qty)]));
 }
 
 /**
@@ -90,7 +112,7 @@ export async function currentCost(
 /** Next sequential number for a document code within the current month. */
 export async function nextSeq(
   tx: Prisma.TransactionClient,
-  model: "purchase" | "sale" | "returnDoc" | "transfer" | "stockOpname" | "shift" | "reject"
+  model: "purchase" | "order" | "sale" | "returnDoc" | "transfer" | "stockOpname" | "shift" | "reject"
 ): Promise<number> {
   const start = new Date();
   start.setDate(1);

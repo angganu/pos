@@ -20,12 +20,12 @@ const ROLE_ID: Record<string, string> = {
 
 /** Mirrors src/lib/rbac.ts — kept visible so admins can see what each role can do. */
 const PERMS: [string, number, number, number, number][] = [
-  ["Transaksi penjualan (kasir)", 1, 1, 1, 1],
+  ["PO di kasir & buat invoice", 1, 1, 1, 1],
   ["Tutup kasir & rekap uang", 1, 1, 1, 1],
   ["Retur & refund", 1, 1, 1, 1],
   ["Pengiriman & surat jalan", 1, 1, 1, 1],
   ["Transaksi pembelian", 1, 1, 1, 0],
-  ["Void / batal transaksi", 1, 1, 1, 0],
+  ["Batalkan PO / void transaksi", 1, 1, 1, 0],
   ["Ubah harga jual", 1, 1, 2, 0],
   ["Kelola member & supplier", 1, 1, 2, 0],
   ["Transfer & opname stok", 1, 1, 2, 0],

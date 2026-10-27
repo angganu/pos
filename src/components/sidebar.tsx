@@ -8,6 +8,7 @@ import {
   ShoppingCart, Truck, RotateCcw, Package, Tags, Users, Building2, Boxes,
   ArrowLeftRight, BarChart3, GitCompareArrows, FileText, ShieldCheck,
   ChevronUp, Settings, Monitor, User, LogOut, Receipt, PackageSearch, PackageX, CarFront, Route, ScrollText,
+  ReceiptText, ClipboardList,
 } from "lucide-react";
 import { useApp } from "./app-context";
 import { can, type Permission } from "@/lib/rbac";
@@ -21,11 +22,12 @@ const GROUPS: NavGroup[] = [
   {
     title: "Transaksi / Sales",
     items: [
-      { href: "/kasir", id: "kasir", label: "Kasir", en: "Sell", icon: ShoppingCart, perm: "sale.create" },
+      { href: "/kasir", id: "kasir", label: "Kasir", en: "PO", icon: ShoppingCart, perm: "sale.create" },
       { href: "/pembelian", id: "beli", label: "Pembelian", en: "Buy", icon: Truck, perm: "purchase.manage" },
       { href: "/retur", id: "retur", label: "Retur", en: "Returns", icon: RotateCcw, perm: "return.manage" },
       { href: "/reject", id: "reject", label: "Reject Barang", en: "Rejects", icon: PackageX, perm: "reject.manage" },
       { href: "/pengiriman", id: "pengiriman", label: "Pengiriman", en: "Delivery", icon: Route, perm: "delivery.manage" },
+      { href: "/invoice", id: "invoice", label: "Buat Invoice", en: "Invoice", icon: ReceiptText, perm: "sale.create" },
     ],
   },
   {
@@ -49,6 +51,7 @@ const GROUPS: NavGroup[] = [
     title: "Laporan / Reports",
     items: [
       { href: "/laba", id: "laba", label: "Dasbor Laba", en: "Profit", icon: BarChart3, perm: "store.all" },
+      { href: "/riwayat-po", id: "riwayat-po", label: "Riwayat PO", en: "Order History", icon: ClipboardList, perm: "history.view" },
       { href: "/riwayat-penjualan", id: "riwayat-penjualan", label: "Riwayat Penjualan", en: "Sales History", icon: Receipt, perm: "history.view" },
       { href: "/riwayat-pembelian", id: "riwayat-pembelian", label: "Riwayat Pembelian", en: "Purchase History", icon: PackageSearch, perm: "history.view" },
       { href: "/riwayat-pengiriman", id: "riwayat-pengiriman", label: "Riwayat Pengiriman", en: "Delivery History", icon: ScrollText, perm: "history.view" },

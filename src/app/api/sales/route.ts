@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { MovementType, PaymentMethod } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, fail, qp, qpInt, qpDate, audit, readJson } from "@/lib/api";
+import { route, ok, fail, qp, qpInt, qpDate, audit, readJson, retryOnCodeClash } from "@/lib/api";
 import { requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { applyMovement, assertStockAvailable, currentCost, nextSeq } from "@/lib/stock";
-import { resolvePrices } from "@/lib/pricing";
-import { round2 } from "@/lib/units";
+import { round2, round4 } from "@/lib/units";
+import { docCode } from "@/lib/format";
 
 export const GET = route(async ({ user, req }) => {
   const { storeId, pinned } = resolveStoreScope(user, qpInt(req, "storeId"));
@@ -21,6 +21,7 @@ export const GET = route(async ({ user, req }) => {
     const sale = await prisma.sale.findFirst({
       where: { id, ...(pinned && storeId ? { storeId } : {}) },
       include: {
+        order: { select: { code: true } },
         store: true, customer: true, user: { select: { name: true } },
         lines: { include: { item: { include: { baseUnit: true } } } },
       },
@@ -49,10 +50,16 @@ export const GET = route(async ({ user, req }) => {
       ...(customerId ? { customerId } : {}),
       ...(itemId ? { lines: { some: { itemId } } } : {}),
       ...(q
-        ? { OR: [{ code: { contains: q } }, { customer: { name: { contains: q } } }, { customer: { code: { contains: q } } }] }
+        ? {
+            OR: [
+              { code: { contains: q } }, { order: { code: { contains: q } } },
+              { customer: { name: { contains: q } } }, { customer: { code: { contains: q } } },
+            ],
+          }
         : {}),
     },
     include: {
+      order: { select: { code: true } },
       store: { select: { code: true, name: true } },
       customer: { select: { code: true, name: true, tier: true } },
       user: { select: { name: true } },
@@ -65,7 +72,7 @@ export const GET = route(async ({ user, req }) => {
   return ok(
     serialize(
       sales.map((s) => ({
-        id: s.id, code: s.code, date: s.date,
+        id: s.id, code: s.code, date: s.date, orderCode: s.order?.code ?? null,
         store: s.store.name, storeCode: s.store.code,
         customer: s.customer?.name ?? "Pelanggan Umum",
         customerTier: s.customer?.tier ?? null,
@@ -79,8 +86,7 @@ export const GET = route(async ({ user, req }) => {
 });
 
 const schema = z.object({
-  storeId: z.number().int(),
-  customerId: z.number().int().nullable().default(null),
+  orderId: z.number().int(),
   shiftId: z.number().int().nullable().default(null),
   taxEnabled: z.boolean().default(true),
   taxRate: z.number().min(0).max(100).default(11),
@@ -90,79 +96,91 @@ const schema = z.object({
   lines: z
     .array(
       z.object({
-        itemId: z.number().int(),
-        qty: z.number().positive("Jumlah harus lebih dari 0"),
+        orderItemId: z.number().int(),
+        /** What the customer received: at most what was ordered, 0 when none of it arrived. */
+        qty: z.number().min(0),
+        unitPrice: z.number().min(0),
         discount: z.number().min(0).default(0),
-        /** Optional manual override; otherwise the resolved price wins. */
-        unitPrice: z.number().min(0).optional(),
       })
     )
-    .min(1, "Keranjang kosong."),
+    .min(1, "PO tidak punya barang."),
 });
 
 /**
- * Posting a sale, atomically:
- *   1. resolves each line's price for (item, store, customer)
- *   2. checks stock, then lowers it and writes a StockMovement per line
+ * Posting the invoice of a delivered PO, atomically:
+ *   1. checks each line against the PO: no more than was ordered, a new price needs price.manage
+ *   2. checks stock, then lowers it by what was received and writes a StockMovement per line
  *   3. snapshots COGS so profit reports stay correct after future price changes
- *   4. awards loyalty points
+ *   4. awards loyalty points and marks the PO paid
+ * What the customer did not receive came back on the truck, so it never leaves stock.
  */
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "sale.create");
   const body = schema.parse(await readJson(req));
-  assertStoreAccess(user, body.storeId);
+  if (new Set(body.lines.map((l) => l.orderItemId)).size !== body.lines.length) {
+    throw new Error("Barang PO tercantum lebih dari sekali.");
+  }
 
-  // Overriding the resolved price is a pricing decision, not a cashier one.
-  if (body.lines.some((l) => l.unitPrice !== undefined)) requirePerm(user, "price.manage");
+  const result = await retryOnCodeClash(() => prisma.$transaction(async (tx) => {
+    // Lock the PO first, so two invoices of it submitted at once cannot both pass the status check.
+    await tx.$queryRaw`SELECT id FROM \`Order\` WHERE id = ${body.orderId} FOR UPDATE`;
 
-  if (body.shiftId) {
-    const shift = await prisma.shift.findUnique({ where: { id: body.shiftId } });
-    if (!shift || shift.userId !== user.id || shift.storeId !== body.storeId || shift.closedAt) {
-      throw new Error("Shift tidak valid untuk transaksi ini.");
+    const order = await tx.order.findUnique({
+      where: { id: body.orderId },
+      include: { items: { include: { item: { select: { name: true } } } } },
+    });
+    if (!order) throw new Error("PO tidak ditemukan.");
+    assertStoreAccess(user, order.storeId);
+    if (order.status === "PAID") throw new Error(`PO ${order.code} sudah dibuatkan invoice.`);
+    if (order.status === "VOID") throw new Error(`PO ${order.code} sudah dibatalkan.`);
+    if (!order.isDelivered) {
+      throw new Error(`PO ${order.code} belum dikirim — invoice dibuat dari barang yang diterima pelanggan.`);
     }
-  }
 
-  const priceMap = await resolvePrices(
-    body.lines.map((l) => l.itemId),
-    body.storeId,
-    body.customerId
-  );
-
-  const missing = body.lines.filter((l) => {
-    const p = priceMap.get(l.itemId);
-    return l.unitPrice === undefined && (!p || p.source === "none");
-  });
-  if (missing.length) {
-    return fail(`Harga belum diatur untuk ${missing.length} barang di toko ini.`, 422);
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    const seq = await nextSeq(tx, "sale");
+    if (body.shiftId) {
+      const shift = await tx.shift.findUnique({ where: { id: body.shiftId } });
+      if (!shift || shift.userId !== user.id || shift.storeId !== order.storeId || shift.closedAt) {
+        throw new Error("Shift tidak valid untuk transaksi ini.");
+      }
+    }
 
     const lines = [];
     let subtotal = 0;
     let lineDiscount = 0;
     let cogs = 0;
+    let repriced = false;
+    /** Total qty per item, so an item on two lines is checked against stock once. */
+    const wanted = new Map<number, number>();
 
     for (const l of body.lines) {
-      const resolved = priceMap.get(l.itemId);
-      const unitPrice = l.unitPrice ?? resolved?.price ?? 0;
-      const basePrice = resolved?.basePrice ?? unitPrice;
-      if (l.discount > round2(l.qty * unitPrice)) throw new Error("Diskon tidak boleh melebihi harga barang.");
-      const total = round2(l.qty * unitPrice - l.discount);
-      const unitCost = await currentCost(tx, l.itemId, body.storeId);
+      const ordered = order.items.find((x) => x.id === l.orderItemId);
+      if (!ordered) throw new Error("Barang yang ditagih tidak ada di PO ini.");
+      if (l.qty > dec(ordered.qty)) {
+        throw new Error(`Qty ${ordered.item.name} melebihi yang dipesan (${dec(ordered.qty)}).`);
+      }
+      if (l.qty === 0) continue;
+      if (l.unitPrice !== dec(ordered.unitPrice)) repriced = true;
+      if (l.discount > round2(l.qty * l.unitPrice)) throw new Error("Diskon tidak boleh melebihi harga barang.");
 
-      await assertStockAvailable(tx, l.itemId, body.storeId, l.qty);
-
-      subtotal += round2(l.qty * unitPrice);
+      const unitCost = await currentCost(tx, ordered.itemId, order.storeId);
+      subtotal += round2(l.qty * l.unitPrice);
       lineDiscount += l.discount;
       cogs += round2(l.qty * unitCost);
+      wanted.set(ordered.itemId, round4((wanted.get(ordered.itemId) ?? 0) + l.qty));
 
       lines.push({
-        itemId: l.itemId, qty: l.qty, unitPrice, basePrice, unitCost,
-        discount: l.discount, total, isMember: resolved?.isMember ?? false,
+        itemId: ordered.itemId, qty: l.qty, unitPrice: l.unitPrice,
+        basePrice: dec(ordered.basePrice), unitCost,
+        discount: l.discount, total: round2(l.qty * l.unitPrice - l.discount), isMember: ordered.isMember,
       });
     }
+    if (lines.length === 0) {
+      throw new Error("Isi qty diterima minimal untuk satu barang. Bila tidak ada yang diterima, batalkan PO-nya.");
+    }
+    // Billing at another price than was ordered is a pricing decision, not a cashier one.
+    if (repriced) requirePerm(user, "price.manage");
+
+    for (const [itemId, qty] of wanted) await assertStockAvailable(tx, itemId, order.storeId, qty);
 
     subtotal = round2(subtotal);
     const taxable = round2(subtotal - lineDiscount);
@@ -172,12 +190,13 @@ export const POST = route(async ({ user, req }) => {
     const change = round2(Math.max(0, paid - total));
 
     const pointsPerRupiah = 1 / 1000;
-    const pointsEarned = body.customerId ? Math.round(total * pointsPerRupiah) : 0;
+    const pointsEarned = order.customerId ? Math.round(total * pointsPerRupiah) : 0;
 
+    const seq = await nextSeq(tx, "sale");
     const sale = await tx.sale.create({
       data: {
-        code: `TRX-${String(Date.now()).slice(-6)}${String(seq).padStart(3, "0")}`,
-        storeId: body.storeId, customerId: body.customerId,
+        code: docCode("INV", seq), orderId: order.id,
+        storeId: order.storeId, customerId: order.customerId,
         userId: user.id, shiftId: body.shiftId,
         subtotal, discount: lineDiscount, tax, total, cogs,
         paid, change, paymentMethod: body.paymentMethod,
@@ -185,32 +204,41 @@ export const POST = route(async ({ user, req }) => {
         pointsEarned,
         lines: { create: lines },
       },
-      include: { lines: true },
     });
 
     for (const l of lines) {
       await applyMovement(tx, {
-        itemId: l.itemId, storeId: body.storeId, qty: -l.qty,
+        itemId: l.itemId, storeId: order.storeId, qty: -l.qty,
         type: MovementType.SALE, userId: user.id, unitCost: l.unitCost,
         refType: "Sale", refId: sale.id,
       });
     }
 
-    if (body.customerId && pointsEarned > 0) {
+    if (order.customerId && pointsEarned > 0) {
       await tx.customer.update({
-        where: { id: body.customerId },
+        where: { id: order.customerId },
         data: { points: { increment: pointsEarned } },
       });
     }
 
-    return sale;
-  });
+    // Backs up the lock: a PO cancelled in the meantime is not invoiced.
+    const { count } = await tx.order.updateMany({
+      where: { id: order.id, status: "UNPAID" },
+      data: { status: "PAID" },
+    });
+    if (count !== 1) throw new Error(`PO ${order.code} baru saja dibatalkan atau ditagih.`);
 
-  await audit(user.id, "create", "Sale", result.id, { code: result.code, total: dec(result.total) });
+    return sale;
+  }));
+
+  await audit(user.id, "create", "Sale", result.id, {
+    code: result.code, orderId: body.orderId, total: dec(result.total),
+  });
 
   const receipt = await prisma.sale.findUniqueOrThrow({
     where: { id: result.id },
     include: {
+      order: { select: { code: true } },
       store: true, customer: true, user: { select: { name: true } },
       lines: { include: { item: { include: { baseUnit: true } } } },
     },
@@ -218,7 +246,7 @@ export const POST = route(async ({ user, req }) => {
 
   return ok(
     serialize({
-      id: receipt.id, code: receipt.code, date: receipt.date,
+      id: receipt.id, code: receipt.code, date: receipt.date, orderCode: receipt.order?.code ?? null,
       store: { name: receipt.store.name, address: receipt.store.address, phone: receipt.store.phone },
       customer: receipt.customer ? { name: receipt.customer.name, code: receipt.customer.code, points: receipt.customer.points } : null,
       cashier: receipt.user.name,

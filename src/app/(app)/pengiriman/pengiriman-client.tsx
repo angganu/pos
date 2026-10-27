@@ -13,7 +13,7 @@ import { mergeLines, noteKey, type DeliveryLine } from "@/lib/delivery";
 
 type Customer = { id: number; code: string; name: string; address: string | null; phone: string | null };
 
-type PendingSale = {
+type PendingOrder = {
   id: number; code: string; date: string; total: number;
   customer: Customer | null; lines: DeliveryLine[];
 };
@@ -26,10 +26,10 @@ type Vehicle = {
 const WALK_IN = "Pelanggan Umum";
 
 export default function PengirimanClient() {
-  // Invoices are picked from one store at a time.
+  // POs are picked from one store at a time.
   const { storeId, store } = useApp();
 
-  const { data: pending, loading, error, refresh: refreshPending } = useFetch<PendingSale[]>(
+  const { data: pending, loading, error, refresh: refreshPending } = useFetch<PendingOrder[]>(
     storeId ? `/api/deliveries${qs({ pending: 1, storeId })}` : null,
     [storeId]
   );
@@ -46,27 +46,27 @@ export default function PengirimanClient() {
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return (pending ?? []).filter(
-      (s) => !needle || [s.code, s.customer?.name ?? WALK_IN].some((v) => v.toLowerCase().includes(needle))
+      (o) => !needle || [o.code, o.customer?.name ?? WALK_IN].some((v) => v.toLowerCase().includes(needle))
     );
   }, [pending, q]);
 
-  const selected = useMemo(() => (pending ?? []).filter((s) => picked.has(s.id)), [pending, picked]);
+  const selected = useMemo(() => (pending ?? []).filter((o) => picked.has(o.id)), [pending, picked]);
 
   /** The surat jalan this delivery will produce, grouped exactly as the server will. */
   const notes = useMemo(() => {
-    const groups = new Map<string, { key: string; customer: Customer | null; sales: PendingSale[] }>();
-    for (const s of selected) {
-      const key = noteKey({ id: s.id, customerId: s.customer?.id ?? null });
-      const g = groups.get(key) ?? { key, customer: s.customer, sales: [] };
-      g.sales.push(s);
+    const groups = new Map<string, { key: string; customer: Customer | null; orders: PendingOrder[] }>();
+    for (const o of selected) {
+      const key = noteKey({ id: o.id, customerId: o.customer?.id ?? null });
+      const g = groups.get(key) ?? { key, customer: o.customer, orders: [] };
+      g.orders.push(o);
       groups.set(key, g);
     }
-    return [...groups.values()].map((g) => ({ ...g, items: mergeLines(g.sales) }));
+    return [...groups.values()].map((g) => ({ ...g, items: mergeLines(g.orders) }));
   }, [selected]);
 
   const activeVehicles = (vehicles ?? []).filter((v) => v.active);
   const vehicle = activeVehicles.find((v) => String(v.id) === vehicleId) ?? null;
-  const allVisiblePicked = visible.length > 0 && visible.every((s) => picked.has(s.id));
+  const allVisiblePicked = visible.length > 0 && visible.every((o) => picked.has(o.id));
 
   function toggle(id: number) {
     setPicked((p) => {
@@ -80,9 +80,9 @@ export default function PengirimanClient() {
   function toggleAll() {
     setPicked((p) => {
       const next = new Set(p);
-      for (const s of visible) {
-        if (allVisiblePicked) next.delete(s.id);
-        else next.add(s.id);
+      for (const o of visible) {
+        if (allVisiblePicked) next.delete(o.id);
+        else next.add(o.id);
       }
       return next;
     });
@@ -93,7 +93,7 @@ export default function PengirimanClient() {
     setMsg(null);
     try {
       const res = await api.post<{ id: number; code: string; noteCount: number }>("/api/deliveries", {
-        saleIds: selected.map((s) => s.id),
+        orderIds: selected.map((o) => o.id),
         vehicleId: Number(vehicleId),
         date,
         note: note.trim() || null,
@@ -118,7 +118,7 @@ export default function PengirimanClient() {
       <PageHeader
         kicker="Transaksi / Delivery"
         title="Pengiriman"
-        subtitle="Pilih faktur yang belum dikirim — satu surat jalan per pelanggan, barang yang sama digabung."
+        subtitle="Pilih PO yang belum dikirim — satu surat jalan per pelanggan, barang yang sama digabung."
         actions={
           <Link href="/riwayat-pengiriman" className="btn btn-secondary h-11 px-4 text-[15px] no-underline">
             Riwayat pengiriman
@@ -153,12 +153,12 @@ export default function PengirimanClient() {
             <div className="mb-2.5 flex flex-wrap items-center gap-2.5">
               <input
                 className="input h-11 max-w-[340px] text-[15px]"
-                placeholder="Cari no. faktur atau pelanggan…"
+                placeholder="Cari no. PO atau pelanggan…"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
               <span className="text-[13px] text-slate-7">
-                {pending?.length ?? 0} faktur belum dikirim · {store?.name}
+                {pending?.length ?? 0} PO belum dikirim · {store?.name}
               </span>
             </div>
 
@@ -166,7 +166,7 @@ export default function PengirimanClient() {
             {loading ? (
               <Loading />
             ) : visible.length === 0 ? (
-              <EmptyState title={pending?.length ? "Tidak ada faktur yang cocok." : "Semua faktur sudah dikirim."} />
+              <EmptyState title={pending?.length ? "Tidak ada PO yang cocok." : "Semua PO sudah dikirim."} />
             ) : (
               <div className="table-wrap table-scroll">
                 <table className="tbl min-w-[640px]">
@@ -175,13 +175,13 @@ export default function PengirimanClient() {
                       <th className="w-[44px]">
                         <input
                           type="checkbox"
-                          aria-label="Pilih semua faktur"
+                          aria-label="Pilih semua PO"
                           checked={allVisiblePicked}
                           onChange={toggleAll}
                           className="h-4 w-4 accent-brand-600"
                         />
                       </th>
-                      <th className="w-[150px]">No. faktur</th>
+                      <th className="w-[150px]">No. PO</th>
                       <th className="w-[160px]">Tanggal</th>
                       <th>Pelanggan</th>
                       <th className="w-[90px] text-right">Barang</th>
@@ -189,32 +189,32 @@ export default function PengirimanClient() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((s) => (
+                    {visible.map((o) => (
                       <tr
-                        key={s.id}
-                        className={clsx("cursor-pointer", picked.has(s.id) && "bg-brand-100")}
-                        onClick={() => toggle(s.id)}
+                        key={o.id}
+                        className={clsx("cursor-pointer", picked.has(o.id) && "bg-brand-100")}
+                        onClick={() => toggle(o.id)}
                       >
                         <td>
                           <input
                             type="checkbox"
-                            aria-label={`Pilih ${s.code}`}
-                            checked={picked.has(s.id)}
-                            onChange={() => toggle(s.id)}
+                            aria-label={`Pilih ${o.code}`}
+                            checked={picked.has(o.id)}
+                            onChange={() => toggle(o.id)}
                             onClick={(e) => e.stopPropagation()}
                             className="h-4 w-4 accent-brand-600"
                           />
                         </td>
-                        <td className="font-semibold">{s.code}</td>
-                        <td className="text-[13px]">{fdatetime(s.date)}</td>
+                        <td className="font-semibold">{o.code}</td>
+                        <td className="text-[13px]">{fdatetime(o.date)}</td>
                         <td>
-                          <div className="text-sm">{s.customer?.name ?? WALK_IN}</div>
+                          <div className="text-sm">{o.customer?.name ?? WALK_IN}</div>
                           <div className="text-[11px] text-slate-7">
-                            {s.customer ? (s.customer.address ?? "alamat belum diisi") : "surat jalan sendiri"}
+                            {o.customer ? (o.customer.address ?? "alamat belum diisi") : "surat jalan sendiri"}
                           </div>
                         </td>
-                        <td className="text-right text-[13px]">{s.lines.length} jenis</td>
-                        <td className="text-right text-sm font-semibold">{rp(s.total)}</td>
+                        <td className="text-right text-[13px]">{o.lines.length} jenis</td>
+                        <td className="text-right text-sm font-semibold">{rp(o.total)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -263,7 +263,7 @@ export default function PengirimanClient() {
               />
             </div>
             <div className="mb-1.5 flex justify-between text-sm">
-              <span>Faktur dipilih</span>
+              <span>PO dipilih</span>
               <span className="font-semibold">{selected.length}</span>
             </div>
             <div className="mb-3 flex items-baseline justify-between">
@@ -278,7 +278,8 @@ export default function PengirimanClient() {
               {busy ? "Menyimpan…" : "Simpan & buat surat jalan"}
             </button>
             <p className="mt-2.5 text-xs text-slate-7">
-              Faktur yang dipilih ditandai sudah dikirim. Membatalkan pengiriman di Riwayat Pengiriman mengembalikannya ke daftar.
+              PO yang dipilih ditandai sudah dikirim, lalu ditagih di menu Buat Invoice sesuai barang yang diterima.
+              Selama belum ada invoice, membatalkan pengiriman di Riwayat Pengiriman mengembalikannya ke daftar.
             </p>
           </div>
         </div>
@@ -289,25 +290,25 @@ export default function PengirimanClient() {
           <h4 className="mb-2.5 text-base">Pratinjau surat jalan</h4>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(440px,100%),1fr))] gap-4">
             {notes.map((n, i) => {
-              const multi = n.sales.length > 1;
+              const multi = n.orders.length > 1;
               return (
                 <div key={n.key} className="bg-white p-4 ring-1 ring-divider">
                   <div className="flex items-center justify-between gap-2.5">
                     <span className="label-kicker">Surat jalan {i + 1}</span>
-                    <span className={multi ? "tag tag-accent" : "tag tag-neutral"}>{n.sales.length} faktur</span>
+                    <span className={multi ? "tag tag-accent" : "tag tag-neutral"}>{n.orders.length} PO</span>
                   </div>
                   <div className="mt-1 text-lg font-extrabold leading-tight">{n.customer?.name ?? WALK_IN}</div>
                   <div className="text-[13px] text-slate-8">
                     {[n.customer?.address, n.customer?.phone].filter(Boolean).join(" · ") || "—"}
                   </div>
-                  <div className="mt-1 text-[12px] text-slate-7">{n.sales.map((s) => s.code).join(", ")}</div>
+                  <div className="mt-1 text-[12px] text-slate-7">{n.orders.map((o) => o.code).join(", ")}</div>
                   <div className="table-wrap mt-3">
                     <table className="tbl">
                       <thead>
                         <tr>
                           <th>Barang</th>
                           <th className="w-[120px] text-right">Total qty</th>
-                          {multi && <th className="w-[170px]">Rincian per faktur</th>}
+                          {multi && <th className="w-[170px]">Rincian per PO</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -322,7 +323,7 @@ export default function PengirimanClient() {
                             </td>
                             {multi && (
                               <td className="text-[11px] text-slate-7">
-                                {it.perInvoice.map((p) => `${p.code}: ${num(p.qty)}`).join(" · ")}
+                                {it.perOrder.map((p) => `${p.code}: ${num(p.qty)}`).join(" · ")}
                               </td>
                             )}
                           </tr>

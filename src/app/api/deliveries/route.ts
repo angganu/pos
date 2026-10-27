@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma, serialize, dec } from "@/lib/db";
-import { route, ok, fail, qp, qpInt, qpDate, audit, readJson } from "@/lib/api";
+import { route, ok, fail, qp, qpInt, qpDate, audit, readJson, retryOnCodeClash } from "@/lib/api";
 import { can, requirePerm, resolveStoreScope, assertStoreAccess } from "@/lib/rbac";
 import { docCode } from "@/lib/format";
 import { noteKey } from "@/lib/delivery";
@@ -10,9 +10,9 @@ const lineSelect = {
   itemId: true,
   qty: true,
   item: { select: { code: true, name: true, baseUnit: { select: { name: true } } } },
-} satisfies Prisma.SaleLineSelect;
+} satisfies Prisma.OrderItemSelect;
 
-function toLine(l: Prisma.SaleLineGetPayload<{ select: typeof lineSelect }>) {
+function toLine(l: Prisma.OrderItemGetPayload<{ select: typeof lineSelect }>) {
   return { itemId: l.itemId, code: l.item.code, name: l.item.name, unit: l.item.baseUnit.name, qty: dec(l.qty) };
 }
 
@@ -21,7 +21,7 @@ const customerSelect = {
 } satisfies Prisma.CustomerSelect;
 
 /**
- * GET /api/deliveries?pending=1&storeId=     -> one store's sales still waiting to be delivered
+ * GET /api/deliveries?pending=1&storeId=     -> one store's POs still waiting to be delivered
  * GET /api/deliveries?id=                    -> one delivery with every surat jalan, for printing
  * GET /api/deliveries?storeId=&from=&to=&q=  -> delivery history (from/to on the delivery date)
  */
@@ -35,18 +35,19 @@ export const GET = route(async ({ user, req }) => {
   const id = qpInt(req, "id");
 
   if (pending) {
-    if (!storeId) return fail("Pilih satu toko untuk melihat faktur yang belum dikirim.", 400);
-    const sales = await prisma.sale.findMany({
-      where: { storeId, status: "POSTED", isDelivered: false },
-      include: { customer: { select: customerSelect }, lines: { select: lineSelect } },
+    if (!storeId) return fail("Pilih satu toko untuk melihat PO yang belum dikirim.", 400);
+    // Not only unpaid ones: sales paid at the kasir before POs existed still await their delivery.
+    const orders = await prisma.order.findMany({
+      where: { storeId, status: { not: "VOID" }, isDelivered: false },
+      include: { customer: { select: customerSelect }, items: { select: lineSelect } },
       orderBy: { date: "asc" },
       take: 300,
     });
     return ok(
       serialize(
-        sales.map((s) => ({
-          id: s.id, code: s.code, date: s.date, total: dec(s.total),
-          customer: s.customer, lines: s.lines.map(toLine),
+        orders.map((o) => ({
+          id: o.id, code: o.code, date: o.date, total: dec(o.total),
+          customer: o.customer, lines: o.items.map(toLine),
         }))
       )
     );
@@ -64,9 +65,9 @@ export const GET = route(async ({ user, req }) => {
           orderBy: { code: "asc" },
           include: {
             customer: { select: customerSelect },
-            sales: {
+            orders: {
               orderBy: { date: "asc" },
-              include: { user: { select: { name: true } }, lines: { select: lineSelect } },
+              include: { user: { select: { name: true } }, items: { select: lineSelect } },
             },
           },
         },
@@ -79,8 +80,8 @@ export const GET = route(async ({ user, req }) => {
         store: d.store, vehicle: d.vehicle, driver: d.driver, driverAssistance: d.driverAssistance,
         notes: d.notes.map((n) => ({
           id: n.id, code: n.code, customer: n.customer,
-          invoices: n.sales.map((s) => ({
-            id: s.id, code: s.code, date: s.date, cashier: s.user.name, lines: s.lines.map(toLine),
+          orders: n.orders.map((o) => ({
+            id: o.id, code: o.code, date: o.date, createdBy: o.user.name, lines: o.items.map(toLine),
           })),
         })),
       })
@@ -107,7 +108,7 @@ export const GET = route(async ({ user, req }) => {
                     OR: [
                       { code: { contains: q } },
                       { customer: { name: { contains: q } } },
-                      { sales: { some: { code: { contains: q } } } },
+                      { orders: { some: { code: { contains: q } } } },
                     ],
                   },
                 },
@@ -124,7 +125,7 @@ export const GET = route(async ({ user, req }) => {
         orderBy: { code: "asc" },
         include: {
           customer: { select: { name: true } },
-          sales: { select: { code: true }, orderBy: { date: "asc" } },
+          orders: { select: { code: true, status: true }, orderBy: { date: "asc" } },
         },
       },
     },
@@ -137,9 +138,11 @@ export const GET = route(async ({ user, req }) => {
       deliveries.map((d) => ({
         id: d.id, code: d.code, date: d.date, store: d.store.name, createdBy: d.user.name,
         vehicleNo: d.vehicle.vehicleNo, vehicleType: d.vehicle.vehicleType, driver: d.driver,
+        // Once a PO on it is invoiced, the trip is part of a fixed transaction.
+        invoiced: d.notes.some((n) => n.orders.some((o) => o.status === "PAID")),
         notes: d.notes.map((n) => ({
           id: n.id, code: n.code, customer: n.customer?.name ?? "Pelanggan Umum",
-          invoices: n.sales.map((s) => s.code),
+          orders: n.orders.map((o) => o.code),
         })),
       }))
     )
@@ -161,24 +164,8 @@ async function lastSeq(tx: Prisma.TransactionClient, prefix: "PG" | "SJ"): Promi
   return last ? Number(last.code.slice(head.length)) || 0 : 0;
 }
 
-/**
- * Two deliveries posted at the same moment draw the same code and the later
- * insert hits the unique key. Running it again picks the next free code — or,
- * when both were after the same invoice, reports that it was just delivered.
- */
-async function retryOnCodeClash<T>(run: () => Promise<T>): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await run();
-    } catch (err) {
-      const clash = err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
-      if (!clash || attempt >= 3) throw err;
-    }
-  }
-}
-
 const schema = z.object({
-  saleIds: z.array(z.number().int()).min(1, "Pilih minimal satu faktur."),
+  orderIds: z.array(z.number().int()).min(1, "Pilih minimal satu PO."),
   vehicleId: z.number().int(),
   date: z.iso.date().transform((s) => new Date(s)),
   note: z.string().trim().max(255).optional().nullable(),
@@ -186,38 +173,38 @@ const schema = z.object({
 
 /**
  * Posting a delivery, atomically:
- *   1. checks every invoice: one store, posted, not delivered yet
+ *   1. checks every PO: one store, not cancelled, not delivered yet
  *   2. writes the delivery and one surat jalan per customer
- *   3. marks the invoices delivered and links each to its surat jalan
+ *   3. marks the POs delivered and links each to its surat jalan
  */
 export const POST = route(async ({ user, req }) => {
   requirePerm(user, "delivery.manage");
   const body = schema.parse(await readJson(req));
-  const saleIds = [...new Set(body.saleIds)];
+  const orderIds = [...new Set(body.orderIds)];
 
   const result = await retryOnCodeClash(() => prisma.$transaction(async (tx) => {
     const vehicle = await tx.vehicle.findFirst({ where: { id: body.vehicleId, active: true } });
     if (!vehicle) throw new Error("Kendaraan tidak ditemukan atau sudah nonaktif.");
 
-    const sales = await tx.sale.findMany({
-      where: { id: { in: saleIds } },
+    const orders = await tx.order.findMany({
+      where: { id: { in: orderIds } },
       select: { id: true, code: true, storeId: true, customerId: true, status: true, isDelivered: true },
       orderBy: { date: "asc" },
     });
-    if (sales.length !== saleIds.length) throw new Error("Sebagian faktur tidak ditemukan.");
-    const storeId = sales[0].storeId;
-    if (sales.some((s) => s.storeId !== storeId)) {
-      throw new Error("Satu pengiriman hanya untuk faktur dari satu toko.");
+    if (orders.length !== orderIds.length) throw new Error("Sebagian PO tidak ditemukan.");
+    const storeId = orders[0].storeId;
+    if (orders.some((o) => o.storeId !== storeId)) {
+      throw new Error("Satu pengiriman hanya untuk PO dari satu toko.");
     }
     assertStoreAccess(user, storeId);
-    const taken = sales.find((s) => s.status !== "POSTED" || s.isDelivered);
-    if (taken) throw new Error(`Faktur ${taken.code} sudah dikirim atau dibatalkan.`);
+    const taken = orders.find((o) => o.status === "VOID" || o.isDelivered);
+    if (taken) throw new Error(`PO ${taken.code} sudah dikirim atau dibatalkan.`);
 
-    const groups = new Map<string, { customerId: number | null; saleIds: number[] }>();
-    for (const s of sales) {
-      const g = groups.get(noteKey(s)) ?? { customerId: s.customerId, saleIds: [] };
-      g.saleIds.push(s.id);
-      groups.set(noteKey(s), g);
+    const groups = new Map<string, { customerId: number | null; orderIds: number[] }>();
+    for (const o of orders) {
+      const g = groups.get(noteKey(o)) ?? { customerId: o.customerId, orderIds: [] };
+      g.orderIds.push(o.id);
+      groups.set(noteKey(o), g);
     }
 
     const delivery = await tx.delivery.create({
@@ -234,14 +221,14 @@ export const POST = route(async ({ user, req }) => {
       const note = await tx.deliveryNote.create({
         data: { code: docCode("SJ", ++seq), deliveryId: delivery.id, customerId: g.customerId },
       });
-      // The isDelivered guard stops two deliveries posted at the same moment
-      // from both taking an invoice: the later one updates fewer rows.
-      const { count } = await tx.sale.updateMany({
-        where: { id: { in: g.saleIds }, isDelivered: false },
+      // The guard stops two deliveries posted at the same moment from both taking
+      // a PO, and skips one cancelled meanwhile: either way fewer rows update.
+      const { count } = await tx.order.updateMany({
+        where: { id: { in: g.orderIds }, isDelivered: false, status: { not: "VOID" } },
         data: { isDelivered: true, deliveryNoteId: note.id },
       });
-      if (count !== g.saleIds.length) {
-        throw new Error("Sebagian faktur baru saja dikirim lewat pengiriman lain. Muat ulang daftarnya.");
+      if (count !== g.orderIds.length) {
+        throw new Error("Sebagian PO baru saja dikirim lewat pengiriman lain atau dibatalkan. Muat ulang daftarnya.");
       }
     }
 
@@ -249,12 +236,15 @@ export const POST = route(async ({ user, req }) => {
   }));
 
   await audit(user.id, "create", "Delivery", result.delivery.id, {
-    code: result.delivery.code, vehicleId: body.vehicleId, saleIds,
+    code: result.delivery.code, vehicleId: body.vehicleId, orderIds,
   });
   return ok(serialize({ id: result.delivery.id, code: result.delivery.code, noteCount: result.noteCount }), 201);
 });
 
-/** Cancelling puts the invoices back on the waiting list; the surat jalan go with the delivery. */
+/**
+ * Cancelling puts the POs back on the waiting list; the surat jalan go with the delivery.
+ * Not once a PO on it is invoiced: that invoice bills what this trip delivered.
+ */
 export const DELETE = route(async ({ user, req }) => {
   requirePerm(user, "delivery.manage");
   const id = qpInt(req, "id");
@@ -264,7 +254,21 @@ export const DELETE = route(async ({ user, req }) => {
     const d = await tx.delivery.findUnique({ where: { id }, select: { code: true, storeId: true } });
     if (!d) throw new Error("Pengiriman tidak ditemukan.");
     assertStoreAccess(user, d.storeId);
-    await tx.sale.updateMany({
+
+    // Lock its POs, so an invoice being made from one right now either lands
+    // before the check below sees it, or waits and then finds the PO undelivered.
+    await tx.$queryRaw`
+      SELECT o.id FROM \`Order\` o JOIN \`DeliveryNote\` n ON n.id = o.deliveryNoteId
+      WHERE n.deliveryId = ${id} FOR UPDATE`;
+    const invoiced = await tx.order.findFirst({
+      where: { deliveryNote: { deliveryId: id }, status: "PAID" },
+      select: { code: true },
+    });
+    if (invoiced) {
+      throw new Error(`PO ${invoiced.code} di pengiriman ini sudah dibuatkan invoice — pengiriman tidak bisa dibatalkan.`);
+    }
+
+    await tx.order.updateMany({
       where: { deliveryNote: { deliveryId: id } },
       data: { isDelivered: false, deliveryNoteId: null },
     });

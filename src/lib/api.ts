@@ -100,6 +100,24 @@ export function toErrorResponse(err: unknown) {
   return fail(GENERIC_ERROR, 500);
 }
 
+/**
+ * Two documents posted at the same moment draw the same sequential code and the
+ * later insert hits the unique key. Running it again picks the next free code — or,
+ * when both were made from the same PO, lets its checks report that it was just taken.
+ */
+export async function retryOnCodeClash<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (err) {
+      const clash = err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+      if (!clash || attempt >= 5) throw err;
+      // A short random pause, so the documents that clashed don't all retry in step.
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * 40 * attempt));
+    }
+  }
+}
+
 export async function audit(
   userId: number | null,
   action: string,

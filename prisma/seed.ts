@@ -1,5 +1,6 @@
 import { PrismaClient, Role, MovementType } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { docCode } from "../src/lib/format";
 
 const prisma = new PrismaClient();
 
@@ -124,10 +125,10 @@ async function main() {
     prisma.auditLog.deleteMany(), prisma.stockMovement.deleteMany(),
     prisma.deliveryNote.deleteMany(), prisma.delivery.deleteMany(),
     prisma.rejectLine.deleteMany(), prisma.reject.deleteMany(),
-    prisma.saleLine.deleteMany(), prisma.returnLine.deleteMany(),
+    prisma.saleLine.deleteMany(), prisma.orderItem.deleteMany(), prisma.returnLine.deleteMany(),
     prisma.purchaseLine.deleteMany(), prisma.transferLine.deleteMany(),
     prisma.opnameLine.deleteMany(), prisma.heldSale.deleteMany(),
-    prisma.returnDoc.deleteMany(), prisma.sale.deleteMany(),
+    prisma.returnDoc.deleteMany(), prisma.sale.deleteMany(), prisma.order.deleteMany(),
     prisma.purchase.deleteMany(), prisma.transfer.deleteMany(),
     prisma.stockOpname.deleteMany(), prisma.shift.deleteMany(),
     prisma.itemPrice.deleteMany(), prisma.itemStock.deleteMany(),
@@ -266,7 +267,8 @@ async function main() {
     }
   }
 
-  // Sales history across six months, so the profit dashboard has a real trend.
+  // Sales history across six months, so the profit dashboard has a real trend:
+  // each sale is a PO that was delivered, then invoiced in full.
   const SOLD: Record<string, number> = {
     "BR-001": 420000, "GL-001": 180000,
     "TP-001": 120000, "MG-001": 640,
@@ -281,7 +283,7 @@ async function main() {
 
   let sSeq = 0;
   for (let monthsAgo = 5; monthsAgo >= 0; monthsAgo--) {
-    // a handful of representative receipts per month
+    // a handful of representative orders per month
     for (let n = 0; n < 6; n++) {
       sSeq += 1;
       const memberCode = memberCodes[(sSeq + n) % memberCodes.length];
@@ -316,16 +318,35 @@ async function main() {
 
       const tax = Math.round(subtotal * 0.11);
       const total = subtotal + tax;
-      await prisma.sale.create({
+      // This month's last orders are still open, waiting for the pengiriman screen.
+      const open = monthsAgo === 0 && n >= 3;
+      // Dated in their own month, so this month's codes continue from them.
+      const order = await prisma.order.create({
         data: {
-          code: `TRX-${String(sSeq).padStart(6, "0")}`,
+          code: docCode("PO", n + 1, date),
           storeId, customerId,
           userId: userIds.get("kasir@satupos.id")!,
-          date, subtotal, discount: 0, tax, total, cogs,
+          date, createdAt: date, subtotal, discount: 0, tax, total,
+          status: open ? "UNPAID" : "PAID",
+          isDelivered: !open,
+          items: {
+            create: lines.map((l) => ({
+              itemId: l.itemId, qty: l.qty, unitPrice: l.unitPrice, basePrice: l.basePrice,
+              discount: l.discount, total: l.total, isMember: l.isMember,
+            })),
+          },
+        },
+      });
+      if (open) continue;
+
+      await prisma.sale.create({
+        data: {
+          code: docCode("INV", n + 1, date), orderId: order.id,
+          storeId, customerId,
+          userId: userIds.get("kasir@satupos.id")!,
+          date, createdAt: date, subtotal, discount: 0, tax, total, cogs,
           paid: total, change: 0, paymentMethod: "CASH",
           pointsEarned: Math.round(total / 1000),
-          // This month's receipts are left waiting for the pengiriman screen.
-          isDelivered: monthsAgo > 0,
           lines: { create: lines },
         },
       });
@@ -345,7 +366,8 @@ async function main() {
   const counts = {
     stores: STORES.length, users: users.length, items: ITEMS.length,
     customers: CUSTOMERS.length, suppliers: SUPPLIERS.length,
-    sales: await prisma.sale.count(), purchases: await prisma.purchase.count(),
+    orders: await prisma.order.count(), sales: await prisma.sale.count(),
+    purchases: await prisma.purchase.count(),
   };
   console.log("✓ Seed complete", counts);
   console.log("  Login: admin@satupos.id / owner@satupos.id / manajer@satupos.id / kasir@satupos.id");

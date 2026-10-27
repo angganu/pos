@@ -9,7 +9,7 @@ import { qs } from "@/lib/client";
 import { rp, num, fdatetime } from "@/lib/format";
 
 type SaleRow = {
-  id: number; code: string; date: string;
+  id: number; code: string; date: string; orderCode: string | null;
   store: string; storeCode: string;
   customer: string; customerTier: string | null;
   cashier: string; lineCount: number;
@@ -19,6 +19,7 @@ type SaleRow = {
 
 type SaleDetail = {
   id: number; code: string; date: string;
+  order: { code: string } | null;
   store: { name: string; address: string | null; phone: string | null };
   customer: { name: string; code: string } | null;
   user: { name: string };
@@ -74,7 +75,7 @@ export default function RiwayatPenjualanClient() {
           <input
             id="q"
             className="input h-10"
-            placeholder="Nomor struk / nama pelanggan…"
+            placeholder="No. invoice / PO, nama pelanggan…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -138,7 +139,12 @@ export default function RiwayatPenjualanClient() {
               <tbody>
                 {(sales ?? []).map((s) => (
                   <tr key={s.id}>
-                    <td className="font-semibold">{s.code}</td>
+                    <td>
+                      <div className="font-semibold">{s.code}</div>
+                      {s.orderCode && s.orderCode !== s.code && (
+                        <div className="text-[11px] text-slate-7">{s.orderCode}</div>
+                      )}
+                    </td>
                     <td className="text-[13px]">{fdatetime(s.date)}</td>
                     <td className="text-[13px]">{s.customer}</td>
                     <td className="text-[13px]">{s.cashier}</td>
@@ -188,7 +194,8 @@ export default function RiwayatPenjualanClient() {
             </div>
             <div className="mb-3 flex flex-wrap justify-between gap-2 text-[13px]">
               <div>
-                <div>No. Struk: <strong>{detail.code}</strong></div>
+                <div>No. Invoice: <strong>{detail.code}</strong></div>
+                {detail.order && detail.order.code !== detail.code && <div>No. PO: {detail.order.code}</div>}
                 <div>Tanggal: {fdatetime(detail.date)}</div>
               </div>
               <div>
