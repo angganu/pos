@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Barcode, Minus, Plus, X, Pause } from "lucide-react";
 import clsx from "clsx";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { Chip, EmptyState, Modal, Loading } from "@/components/ui";
+import { Chip, CheckBox, EmptyState, Modal, Loading, PAPER_TABLE } from "@/components/ui";
 import { api, qs } from "@/lib/client";
-import { rp, num, initials } from "@/lib/format";
+import { rp, num, initials, fdatetime } from "@/lib/format";
 
 type ItemRow = {
   id: number; code: string; barcode: string | null; name: string;
@@ -575,12 +576,12 @@ export default function KasirClient() {
         </div>
       </Modal>
 
-      {/* PO slip */}
+      {/* PO checklist */}
       <Modal
         open={dialog === "slip"}
         onClose={() => setDialog(null)}
         title="Purchase order (PO)"
-        width="380px"
+        width="520px"
         footer={
           <>
             <button className="btn btn-secondary no-print" onClick={() => setDialog(null)}>Tutup</button>
@@ -589,36 +590,78 @@ export default function KasirClient() {
         }
       >
         {slip && (
-          <div className="font-mono text-xs leading-relaxed ring-1 ring-divider p-4">
-            <div className="text-center font-bold tracking-widest">KASAKU</div>
-            <div className="text-center">{slip.store.name}</div>
-            <div className="text-center">{slip.store.address}</div>
-            <div className="my-2 border-t border-dashed border-slate-5" />
-            <div className="text-center font-bold tracking-widest">PURCHASE ORDER</div>
-            <div className="flex justify-between"><span>No. {slip.code}</span><span>{new Date(slip.date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</span></div>
-            <div className="flex justify-between"><span>Kasir</span><span>{slip.cashier}</span></div>
-            <div className="flex justify-between"><span>Pelanggan</span><span>{slip.customer?.name ?? "Umum"}</span></div>
-            <div className="my-2 border-t border-dashed border-slate-5" />
-            {slip.lines.map((l, i) => (
-              <div key={i} className="mb-1">
-                <div>{l.name}</div>
-                <div className="flex justify-between">
-                  <span>{num(l.qty)} {l.unit} × {rp(l.unitPrice)}</span>
-                  <span>{rp(l.total)}</span>
-                </div>
-              </div>
-            ))}
-            <div className="my-2 border-t border-dashed border-slate-5" />
-            <div className="flex justify-between"><span>Subtotal</span><span>{rp(slip.subtotal)}</span></div>
-            <div className="flex justify-between"><span>Diskon</span><span>-{rp(slip.discount)}</span></div>
-            <div className="flex justify-between"><span>PPN {TAX_RATE}%</span><span>{rp(slip.tax)}</span></div>
-            <div className="mt-1 flex justify-between text-sm font-bold"><span>TOTAL</span><span>{rp(slip.total)}</span></div>
-            <div className="my-2 border-t border-dashed border-slate-5" />
-            <div className="text-center">BELUM DIBAYAR — invoice menyusul sesuai barang yang diterima.</div>
-            <div className="mt-1.5 text-center">Terima kasih — Thank you</div>
+          <div className="bg-white p-4 ring-1 ring-divider">
+            <PoChecklist slip={slip} />
           </div>
         )}
       </Modal>
+      {/* What reaches the paper: the checklist alone, without the screen behind the modal. */}
+      {slip && dialog === "slip" &&
+        createPortal(
+          <div className="print-only hidden print:block">
+            <PoChecklist slip={slip} />
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
+/** The PO as a checklist: printed, then each item is ticked off by hand on the paper. */
+function PoChecklist({ slip }: { slip: Slip }) {
+  return (
+    <div className="text-[13px] leading-snug text-ink">
+      <div className="flex items-start justify-between gap-4 border-b-2 border-ink pb-2">
+        <div className="min-w-0">
+          <div className="text-[15px] font-extrabold tracking-[0.06em]">KASAKU</div>
+          <div className="font-semibold">{slip.store.name}</div>
+          {slip.store.address && <div>{slip.store.address}</div>}
+        </div>
+        <div className="flex-none text-right">
+          <div className="text-[15px] font-extrabold tracking-[0.06em]">PURCHASE ORDER</div>
+          <div className="font-bold">{slip.code}</div>
+          <div>{fdatetime(slip.date)}</div>
+        </div>
+      </div>
+
+      <div className="my-2 flex flex-wrap justify-between gap-x-4">
+        <span>Pelanggan: <b>{slip.customer?.name ?? "Umum"}</b></span>
+        <span>Kasir: {slip.cashier}</span>
+      </div>
+
+      <table className={PAPER_TABLE}>
+        <thead>
+          <tr>
+            <th className="w-9 text-left">No</th>
+            <th className="w-full text-left">Barang</th>
+            <th className="text-right">Qty</th>
+            <th className="w-12 text-center">Cek</th>
+          </tr>
+        </thead>
+        <tbody>
+          {slip.lines.map((l, i) => (
+            <tr key={i}>
+              <td>{i + 1}</td>
+              <td>
+                <div className="font-semibold">{l.name}</div>
+                <div className="text-[11px] text-slate-7">{l.code}</div>
+              </td>
+              <td className="whitespace-nowrap text-right font-bold">{num(l.qty)} {l.unit}</td>
+              <td className="text-center">
+                <CheckBox />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="mt-2 flex flex-wrap justify-between gap-x-4">
+        <span>{slip.lines.length} jenis barang</span>
+        <span>Total PO <b>{rp(slip.total)}</b></span>
+      </div>
+      <p className="m-0 mt-1 text-[11px] text-slate-7">
+        Belum dibayar — invoice dibuat sesuai barang yang diterima pelanggan.
+      </p>
     </div>
   );
 }

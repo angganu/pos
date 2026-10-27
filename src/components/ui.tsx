@@ -101,6 +101,18 @@ export function Chip({
   );
 }
 
+/** Ruled table for printed documents: every cell boxed, each row kept whole across page breaks. */
+export const PAPER_TABLE =
+  "w-full border-collapse [print-color-adjust:exact] [&_tr]:break-inside-avoid " +
+  "[&_td]:border [&_td]:border-ink [&_td]:px-2 [&_td]:py-1.5 " +
+  "[&_th]:border [&_th]:border-ink [&_th]:bg-slate-2 [&_th]:px-2 [&_th]:py-1 " +
+  "[&_th]:text-[11px] [&_th]:font-extrabold [&_th]:uppercase [&_th]:tracking-[0.08em]";
+
+/** An empty box to tick by hand on a printed page — drawn for paper, not a form control. */
+export function CheckBox() {
+  return <span aria-hidden className="inline-block h-4 w-4 border-[1.5px] border-ink align-middle" />;
+}
+
 export function Modal({
   open,
   onClose,

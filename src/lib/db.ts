@@ -6,6 +6,10 @@ export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+    // Posting a document is one transaction of many round trips (lock, checks, lines, a
+    // stock movement per line): about 1 s per invoice line against a remote database
+    // ~100 ms away. Prisma's 5 s default ran out midway and rolled postings back (P2028).
+    transactionOptions: { maxWait: 10_000, timeout: 60_000 },
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

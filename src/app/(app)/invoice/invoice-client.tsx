@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import clsx from "clsx";
 import { Printer } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, Loading, EmptyState, Modal, SearchSelect } from "@/components/ui";
+import { PageHeader, Loading, EmptyState, Modal, SearchSelect, PAPER_TABLE } from "@/components/ui";
 import { api, qs } from "@/lib/client";
 import { can } from "@/lib/rbac";
 import { rp, num, fdatetime, fday } from "@/lib/format";
@@ -408,7 +409,7 @@ export default function InvoiceClient() {
         open={showInvoice && invoice !== null}
         onClose={() => setShowInvoice(false)}
         title="Invoice"
-        width="680px"
+        width="760px"
         footer={
           <>
             <button className="btn btn-secondary no-print" onClick={() => setShowInvoice(false)}>Tutup</button>
@@ -419,68 +420,104 @@ export default function InvoiceClient() {
         }
       >
         {invoice && (
-          <div>
-            <div className="mb-4 text-center">
-              <div className="text-lg font-extrabold">{invoice.store.name}</div>
-              <div className="text-[13px] text-slate-7">{invoice.store.address}</div>
-              <div className="text-[13px] text-slate-7">{invoice.store.phone}</div>
-              <div className="mt-2 text-base font-extrabold">INVOICE</div>
-            </div>
-            <div className="mb-3 flex flex-wrap justify-between gap-2 text-[13px]">
-              <div>
-                <div>No. invoice: <strong>{invoice.code}</strong></div>
-                <div>No. PO: {invoice.orderCode ?? "—"}</div>
-                <div>Tanggal: {fdatetime(invoice.date)}</div>
-              </div>
-              <div>
-                <div>Kasir: {invoice.cashier}</div>
-                <div>Pelanggan: {invoice.customer?.name ?? "Pelanggan Umum"}</div>
-              </div>
-            </div>
-            <div className="table-wrap">
-              <table className="tbl min-w-full">
-                <thead>
-                  <tr>
-                    <th>Barang</th>
-                    <th className="w-[90px] text-right">Qty</th>
-                    <th className="w-[120px] text-right">Harga</th>
-                    <th className="w-[100px] text-right">Diskon</th>
-                    <th className="w-[130px] text-right">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoice.lines.map((l, i) => (
-                    <tr key={i}>
-                      <td>
-                        <div className="text-sm font-semibold">{l.name}</div>
-                        <div className="text-[11px] text-slate-7">{l.code}</div>
-                      </td>
-                      <td className="whitespace-nowrap text-right text-[13px]">{num(l.qty)} {l.unit}</td>
-                      <td className="text-right text-[13px]">{rp(l.unitPrice)}</td>
-                      <td className="text-right text-[13px]">{rp(l.discount)}</td>
-                      <td className="text-right text-sm font-semibold">{rp(l.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <div className="w-[260px] text-sm">
-                <div className="flex justify-between py-0.5"><span>Subtotal</span><span>{rp(invoice.subtotal)}</span></div>
-                <div className="flex justify-between py-0.5"><span>Diskon</span><span>-{rp(invoice.discount)}</span></div>
-                <div className="flex justify-between py-0.5"><span>PPN</span><span>{rp(invoice.tax)}</span></div>
-                <div className="flex justify-between border-t border-divider py-1 font-bold"><span>TOTAL</span><span>{rp(invoice.total)}</span></div>
-                <div className="flex justify-between py-0.5"><span>{PAYMENT[invoice.paymentMethod as Payment] ?? invoice.paymentMethod}</span><span>{rp(invoice.paid)}</span></div>
-              </div>
-            </div>
-            {invoice.customer && (
-              <p className="mb-0 mt-3 text-center text-[13px] text-slate-7">
-                +{num(invoice.pointsEarned)} poin · total poin {num(invoice.customer.points)}
-              </p>
-            )}
+          <div className="bg-white p-4 ring-1 ring-divider">
+            <InvoiceSheet invoice={invoice} />
           </div>
         )}
       </Modal>
+      {/* What reaches the paper. The modal is pinned to the screen and scrolls, so printing it
+          showed one screenful; this copy sits in the page flow and runs on for as many pages
+          as the invoice needs, without the screen behind the modal. */}
+      {invoice && showInvoice &&
+        createPortal(
+          <div className="print-only hidden print:block">
+            <InvoiceSheet invoice={invoice} />
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
+/** The invoice as it goes on paper; the modal previews the same sheet. */
+function InvoiceSheet({ invoice: inv }: { invoice: Invoice }) {
+  const sums: [string, string][] = [
+    ["Subtotal", rp(inv.subtotal)],
+    ["Diskon", `– ${rp(inv.discount)}`],
+    ["PPN", rp(inv.tax)],
+  ];
+  return (
+    <div className="text-[13px] leading-snug text-ink">
+      <div className="flex items-start justify-between gap-4 border-b-2 border-ink pb-2">
+        <div className="min-w-0">
+          <div className="text-[15px] font-extrabold tracking-[0.06em]">KASAKU</div>
+          <div className="font-semibold">{inv.store.name}</div>
+          {inv.store.address && <div>{inv.store.address}</div>}
+          {inv.store.phone && <div>Telp. {inv.store.phone}</div>}
+        </div>
+        <div className="flex-none text-right">
+          <div className="text-[15px] font-extrabold tracking-[0.06em]">INVOICE</div>
+          <div className="font-bold">{inv.code}</div>
+          <div>{fdatetime(inv.date)}</div>
+        </div>
+      </div>
+
+      <div className="my-2 flex flex-wrap justify-between gap-x-4">
+        <span>Pelanggan: <b>{inv.customer?.name ?? "Pelanggan Umum"}</b></span>
+        <span>No. PO: {inv.orderCode ?? "—"} · Kasir: {inv.cashier}</span>
+      </div>
+
+      {/* A long table breaks between rows, and the browser repeats its header row on each page. */}
+      <table className={PAPER_TABLE}>
+        <thead>
+          <tr>
+            <th className="w-9 text-left">No</th>
+            <th className="w-full text-left">Barang</th>
+            <th className="text-right">Qty</th>
+            <th className="text-right">Harga</th>
+            <th className="text-right">Diskon</th>
+            <th className="text-right">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {inv.lines.map((l, i) => (
+            <tr key={i}>
+              <td>{i + 1}</td>
+              <td>
+                <div className="font-semibold">{l.name}</div>
+                <div className="text-[11px] text-slate-7">{l.code}</div>
+              </td>
+              <td className="whitespace-nowrap text-right">{num(l.qty)} {l.unit}</td>
+              <td className="whitespace-nowrap text-right">{rp(l.unitPrice)}</td>
+              <td className="whitespace-nowrap text-right">{l.discount ? rp(l.discount) : "—"}</td>
+              <td className="whitespace-nowrap text-right font-semibold">{rp(l.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* One block, so a page break never separates the total from its sum. */}
+      <div className="ml-auto mt-2 w-[260px] max-w-full break-inside-avoid">
+        {sums.map(([label, value]) => (
+          <div key={label} className="flex justify-between py-0.5">
+            <span>{label}</span>
+            <span>{value}</span>
+          </div>
+        ))}
+        <div className="flex justify-between border-t-2 border-ink py-1 text-[15px] font-extrabold">
+          <span>TOTAL</span>
+          <span>{rp(inv.total)}</span>
+        </div>
+        <div className="flex justify-between py-0.5">
+          <span>{PAYMENT[inv.paymentMethod as Payment] ?? inv.paymentMethod}</span>
+          <span>{rp(inv.paid)}</span>
+        </div>
+      </div>
+      {inv.customer && (
+        <p className="m-0 mt-2 text-[11px] text-slate-7">
+          +{num(inv.pointsEarned)} poin · total poin {num(inv.customer.points)}
+        </p>
+      )}
     </div>
   );
 }

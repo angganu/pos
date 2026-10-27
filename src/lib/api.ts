@@ -13,6 +13,7 @@ const PRISMA_ERRORS: Record<string, [number, string]> = {
   P2002: [409, "Data dengan kode atau nilai yang sama sudah ada."],
   P2003: [400, "Data terkait tidak valid atau masih dipakai."],
   P2025: [404, "Data tidak ditemukan."],
+  P2028: [503, "Database terlalu lama merespons, jadi transaksi dibatalkan dan tidak ada yang tersimpan. Silakan coba lagi."],
 };
 
 const MAX_JSON_BYTES = 1024 * 1024;
