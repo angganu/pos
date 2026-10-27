@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
+import { initials } from "@/lib/format";
 
 export function PageHeader({
   kicker,
@@ -99,6 +100,59 @@ export function Chip({
     >
       {children}
     </button>
+  );
+}
+
+/** One choice out of a few, as joined buttons — for form fields where a dropdown hides too much. */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  className = "h-10",
+}: {
+  value: T | "";
+  options: [T, string][];
+  onChange: (value: T) => void;
+  className?: string;
+}) {
+  return (
+    <div role="radiogroup" className="flex">
+      {options.map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={value === v}
+          onClick={() => onChange(v)}
+          className={clsx(
+            "flex-1 whitespace-nowrap px-3 text-sm font-semibold ring-1 ring-divider transition-colors",
+            className,
+            value === v ? "bg-ink text-white" : "bg-white text-ink hover:bg-slate-2"
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A person's photo, or their initials on a grey square when there is none. */
+export function Avatar({ name, src, size = 34 }: { name: string; src?: string | null; size?: number }) {
+  const box = { width: size, height: size };
+  if (src) {
+    // A plain <img>: the photo comes from our own authenticated API and the optimizer is off.
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" style={box} className="flex-none bg-slate-3 object-cover" />;
+  }
+  return (
+    <div
+      aria-hidden
+      style={{ ...box, fontSize: Math.round(size * 0.34) }}
+      className="flex flex-none items-center justify-center bg-slate-3 font-extrabold text-slate-8"
+    >
+      {initials(name)}
+    </div>
   );
 }
 

@@ -15,7 +15,7 @@ export const GET = route(async ({ user }) => {
     serialize(
       users.map((u) => ({
         id: u.id, name: u.name, email: u.email, role: u.role,
-        storeId: u.storeId,
+        employeeId: u.employeeId, storeId: u.storeId,
         storeLabel: u.store ? `${u.store.code} · ${u.store.name}` : "Semua toko",
         active: u.active, lastLoginAt: u.lastLoginAt,
       }))
@@ -24,7 +24,8 @@ export const GET = route(async ({ user }) => {
 });
 
 const schema = z.object({
-  name: z.string().min(1).max(120),
+  /** The employee this login is for; the user's name is the employee's. */
+  employeeId: z.number().int(),
   email: z.email(),
   password: z.string().min(8, "Kata sandi minimal 8 karakter").max(PASSWORD_MAX),
   role: z.enum(Role),
@@ -39,9 +40,17 @@ export const POST = route(async ({ user, req }) => {
     throw new Error("Manajer dan kasir wajib ditugaskan ke satu toko.");
   }
 
+  const employee = await prisma.employee.findUnique({
+    where: { id: body.employeeId },
+    select: { name: true, status: true, user: { select: { id: true } } },
+  });
+  if (!employee) throw new Error("Karyawan tidak ditemukan.");
+  if (employee.user) throw new Error("Karyawan ini sudah punya akun pengguna.");
+  if (employee.status !== "ACTIVE") throw new Error("Karyawan nonaktif tidak bisa diberi akun.");
+
   const created = await prisma.user.create({
     data: {
-      name: body.name, email: body.email.toLowerCase(), role: body.role,
+      name: employee.name, employeeId: body.employeeId, email: body.email.toLowerCase(), role: body.role,
       storeId: body.role === "ADMIN" || body.role === "OWNER" ? null : body.storeId,
       passwordHash: await hashPassword(body.password),
     },
@@ -51,9 +60,9 @@ export const POST = route(async ({ user, req }) => {
   return ok(serialize({ id: created.id, email: created.email }), 201);
 });
 
+// No name: it is the employee's, changed on the Karyawan screen.
 const patchSchema = z.object({
   id: z.number().int(),
-  name: z.string().min(1).max(120).optional(),
   role: z.enum(Role).optional(),
   storeId: z.number().int().nullable().optional(),
   active: z.boolean().optional(),
@@ -66,6 +75,15 @@ export const PATCH = route(async ({ user, req }) => {
 
   if (id === user.id && rest.active === false) {
     throw new Error("Anda tidak bisa menonaktifkan akun Anda sendiri.");
+  }
+  if (rest.active) {
+    const { employee } = await prisma.user.findUniqueOrThrow({
+      where: { id },
+      select: { employee: { select: { status: true } } },
+    });
+    if (employee.status !== "ACTIVE") {
+      throw new Error("Karyawannya sudah nonaktif. Aktifkan dulu data karyawannya di menu Karyawan.");
+    }
   }
 
   const updated = await prisma.user.update({

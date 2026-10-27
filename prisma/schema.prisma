@@ -58,31 +58,69 @@ enum TransferStatus {
   CANCELLED
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// How often an employee is paid. Each employee has their own.
+enum WagePeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+/// PRESENT is a paid day and HALF_DAY half of one; LEAVE, SICK and ABSENT are unpaid.
+enum AttendanceStatus {
+  PRESENT
+  HALF_DAY
+  LEAVE
+  SICK
+  ABSENT
+}
+
+enum WageStatus {
+  UNPAID
+  PAID
+}
+
 model User {
   id           Int       @id @default(autoincrement())
+  /// Copied from the employee, and kept in step when the employee is renamed.
   name         String    @db.VarChar(120)
   email        String    @unique @db.VarChar(160)
   passwordHash String    @db.VarChar(255)
   role         Role
   storeId      Int?
+  /// Every login belongs to an employee; most employees never get one.
+  employeeId   Int       @unique
   active       Boolean   @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  store      Store?          @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  orders     Order[]
-  sales      Sale[]
-  purchases  Purchase[]
-  returns    ReturnDoc[]
-  transfers  Transfer[]
-  opnames    StockOpname[]
-  shifts     Shift[]
-  movements  StockMovement[]
-  audits     AuditLog[]
-  heldSales  HeldSale[]
-  rejects    Reject[]
-  deliveries Delivery[]
+  employee    Employee             @relation(fields: [employeeId], references: [id])
+  store       Store?               @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  orders      Order[]
+  sales       Sale[]
+  purchases   Purchase[]
+  returns     ReturnDoc[]
+  transfers   Transfer[]
+  opnames     StockOpname[]
+  shifts      Shift[]
+  movements   StockMovement[]
+  audits      AuditLog[]
+  heldSales   HeldSale[]
+  rejects     Reject[]
+  deliveries  Delivery[]
+  /// Attendance this user recorded and wages this user calculated.
+  attendances EmployeeAttendance[]
+  wages       EmployeeWage[]
 
   @@index([storeId])
   @@index([role])
@@ -113,6 +151,7 @@ model Store {
   heldSales     HeldSale[]
   rejects       Reject[]
   deliveries    Delivery[]
+  employees     Employee[]
 }
 
 model Customer {
@@ -169,6 +208,96 @@ model Vehicle {
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   deliveries Delivery[]
+}
+
+/// Karyawan. Snake_case columns like the spec they came from, as in Vehicle.
+/// Paid dailyWage for each day worked, settled every wagePeriod.
+model Employee {
+  id         Int            @id @default(autoincrement())
+  name       String         @db.VarChar(120)
+  /// Null only for the employees made for existing user accounts, until someone fills it in.
+  gender     Gender?
+  birthDate  DateTime?      @map("birth_date") @db.Date
+  phone      String?        @db.VarChar(40)
+  /// Contact email; the login email lives on User.
+  email      String?        @db.VarChar(160)
+  joinedAt   DateTime       @map("joined_at") @db.Date
+  resignAt   DateTime?      @map("resign_at") @db.Date
+  status     EmployeeStatus @default(ACTIVE)
+  storeId    Int?           @map("store_id")
+  wagePeriod WagePeriod     @default(MONTHLY) @map("wage_period")
+  dailyWage  Decimal        @default(0) @map("daily_wage") @db.Decimal(18, 2)
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  store       Store?               @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  user        User?
+  photo       EmployeePhoto?
+  attendances EmployeeAttendance[]
+  wages       EmployeeWage[]
+
+  @@index([storeId])
+  @@index([status])
+}
+
+/// The employee's photo, kept apart so listing employees never loads the image bytes.
+model EmployeePhoto {
+  employeeId Int      @id @map("employee_id")
+  mimeType   String   @map("mime_type") @db.VarChar(40)
+  data       Bytes    @db.MediumBlob
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+/// One employee on one day. No row = not recorded yet.
+/// A day inside a PAID wage is locked; one inside an UNPAID wage re-counts that wage.
+model EmployeeAttendance {
+  id         Int              @id @default(autoincrement())
+  employeeId Int              @map("employee_id")
+  date       DateTime         @db.Date
+  status     AttendanceStatus
+  note       String?          @db.VarChar(255)
+  /// Who recorded it.
+  userId     Int?             @map("user_id")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, date])
+  @@index([date])
+}
+
+/// Upah — one employee's pay for one period: workDays (counted from attendance)
+/// × dailyWage + allowance − deduction. period and dailyWage are copied from the
+/// employee, so changing them later doesn't rewrite a wage already calculated.
+model EmployeeWage {
+  id          Int        @id @default(autoincrement())
+  employeeId  Int        @map("employee_id")
+  period      WagePeriod
+  periodStart DateTime   @map("period_start") @db.Date
+  periodEnd   DateTime   @map("period_end") @db.Date
+  workDays    Decimal    @map("work_days") @db.Decimal(6, 1)
+  dailyWage   Decimal    @map("daily_wage") @db.Decimal(18, 2)
+  allowance   Decimal    @default(0) @db.Decimal(18, 2)
+  deduction   Decimal    @default(0) @db.Decimal(18, 2)
+  total       Decimal    @db.Decimal(18, 2)
+  status      WageStatus @default(UNPAID)
+  paidAt      DateTime?  @map("paid_at")
+  note        String?    @db.VarChar(255)
+  /// Who calculated it.
+  userId      Int        @map("user_id")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([employeeId, periodStart])
+  @@index([periodStart])
+  @@index([status])
 }
 
 model Category {

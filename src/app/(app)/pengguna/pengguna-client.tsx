@@ -1,17 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import clsx from "clsx";
 import { useApp } from "@/components/app-context";
 import useFetch from "@/components/use-fetch";
-import { PageHeader, Loading, Modal, SearchSelect } from "@/components/ui";
+import { PageHeader, Loading, Modal, SearchSelect, ErrorBox } from "@/components/ui";
 import { api } from "@/lib/client";
 import { fdatetime, initials } from "@/lib/format";
 
 type UserRow = {
-  id: number; name: string; email: string; role: string;
+  id: number; name: string; email: string; role: string; employeeId: number;
   storeId: number | null; storeLabel: string; active: boolean; lastLoginAt: string | null;
 };
+
+/** An active employee without a login yet. */
+type Candidate = { id: number; name: string; email: string | null; storeId: number | null; storeLabel: string | null };
+
+const EMPTY_FORM = { employeeId: "", email: "", password: "", role: "CASHIER", storeId: "" };
 
 const ROLES = ["ADMIN", "OWNER", "MANAGER", "CASHIER"] as const;
 const ROLE_ID: Record<string, string> = {
@@ -30,8 +36,10 @@ const PERMS: [string, number, number, number, number][] = [
   ["Kelola member & supplier", 1, 1, 2, 0],
   ["Transfer & opname stok", 1, 1, 2, 0],
   ["Lihat laba & laporan", 1, 1, 2, 0],
+  ["Catat absensi karyawan", 1, 1, 2, 0],
   ["Kelola barang & kategori", 1, 1, 0, 0],
   ["Kelola master kendaraan", 1, 1, 0, 0],
+  ["Kelola data karyawan & upah", 1, 1, 0, 0],
   ["Akses semua toko", 1, 1, 0, 0],
   ["Kelola pengguna & peran", 1, 0, 0, 0],
 ];
@@ -41,22 +49,39 @@ export default function PenggunaClient() {
   const { stores } = useApp();
   const { data, loading, refresh } = useFetch<UserRow[]>("/api/users");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "CASHIER", storeId: "" });
+  const { data: candidates } = useFetch<Candidate[]>(open ? "/api/employees?available=1" : null);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const needsStore = form.role === "MANAGER" || form.role === "CASHIER";
 
+  /** Picking the employee fills in what the login can take from them. */
+  function pickEmployee(v: string) {
+    const e = candidates?.find((c) => String(c.id) === v);
+    setForm({
+      ...form,
+      employeeId: v,
+      email: form.email || e?.email || "",
+      storeId: e?.storeId ? String(e.storeId) : form.storeId,
+    });
+  }
+
   async function create() {
+    if (!form.employeeId) {
+      setError("Pilih karyawan pemilik akun ini.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await api.post("/api/users", {
-        name: form.name, email: form.email, password: form.password, role: form.role,
+        employeeId: Number(form.employeeId), email: form.email, password: form.password, role: form.role,
         storeId: needsStore && form.storeId ? Number(form.storeId) : null,
       });
       setOpen(false);
-      setForm({ name: "", email: "", password: "", role: "CASHIER", storeId: "" });
+      setForm(EMPTY_FORM);
       refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal menambah pengguna.");
@@ -66,8 +91,13 @@ export default function PenggunaClient() {
   }
 
   async function toggleActive(u: UserRow) {
-    await api.patch("/api/users", { id: u.id, active: !u.active });
-    refresh();
+    setListError(null);
+    try {
+      await api.patch("/api/users", { id: u.id, active: !u.active });
+      refresh();
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : "Gagal mengubah status pengguna.");
+    }
   }
 
   return (
@@ -75,13 +105,21 @@ export default function PenggunaClient() {
       <PageHeader
         kicker="Sistem / Administrator"
         title="Pengguna & peran"
-        subtitle="Satu pengguna = satu peran = satu (atau semua) toko."
+        subtitle="Satu pengguna = satu karyawan = satu peran = satu (atau semua) toko."
         actions={
-          <button className="btn btn-primary h-11 px-4 text-[15px]" onClick={() => setOpen(true)}>
+          <button
+            className="btn btn-primary h-11 px-4 text-[15px]"
+            onClick={() => {
+              setError(null);
+              setOpen(true);
+            }}
+          >
             + Tambah pengguna
           </button>
         }
       />
+
+      {listError && <ErrorBox message={listError} />}
 
       {loading ? (
         <Loading />
@@ -187,11 +225,26 @@ export default function PenggunaClient() {
         <div className="flex flex-col gap-3.5">
           {error && <div className="bg-brand-100 px-3 py-2 text-sm font-semibold text-brand-800">{error}</div>}
           <div className="field">
-            <label htmlFor="n">Nama lengkap</label>
-            <input id="n" className="input h-10" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <label htmlFor="emp">Karyawan</label>
+            <SearchSelect
+              id="emp"
+              className="input h-10"
+              value={form.employeeId}
+              onChange={pickEmployee}
+              placeholder={candidates ? "Pilih karyawan…" : "Memuat karyawan…"}
+              emptyText="Semua karyawan aktif sudah punya akun."
+              options={(candidates ?? []).map((c) => ({
+                value: String(c.id),
+                label: c.storeLabel ? `${c.name} — ${c.storeLabel}` : c.name,
+              }))}
+            />
+            <p className="m-0 mt-1.5 text-xs text-slate-7">
+              Nama pengguna mengikuti data karyawan. Karyawan belum ada? Tambahkan dulu di{" "}
+              <Link href="/karyawan">Data Karyawan</Link>.
+            </p>
           </div>
           <div className="field">
-            <label htmlFor="e">Email</label>
+            <label htmlFor="e">Email login</label>
             <input id="e" type="email" className="input h-10" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="field">

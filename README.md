@@ -60,6 +60,9 @@ npm run dev                          # http://localhost:3000
 | Member who spends the most, total items sold | `GET /api/reports/top-members` |
 | Cheapest supplier for the same item, highest member price | `GET /api/reports/supplier-comparison` |
 | 4 roles with distinct privileges | `src/lib/rbac.ts` — enforced server-side, mirrored in the nav |
+| Employees, with or without a login; every login belongs to one | `Employee`, `User.employeeId` (required, unique) |
+| Attendance per day, recapped per pay period | `EmployeeAttendance`, `/api/attendance` |
+| Wages from attendance × daily wage, each employee on their own period (daily / weekly / monthly) | `EmployeeWage`, `Employee.wagePeriod`, `src/lib/wages.ts` |
 
 ### Standard POS features added
 
@@ -81,8 +84,11 @@ src/
       barang/ harga/    items + the store × member price matrix
       pelanggan/ supplier/
       stok/ opname/     inventory, transfers, stock count
+      karyawan/         employees: photo, personal data, store, wage period + daily wage
+      absensi/          attendance: daily input sheet + monthly recap grid (CSV)
+      upah/             wages: per-period pay sheet, pay / undo, history, pay slip
       laba/ banding/ laporan/
-      pengguna/         users, roles, permission matrix
+      pengguna/         users (each made for an employee), roles, permission matrix
       profil/ sistem/ pengaturan/
     api/                route handlers (REST, JSON envelope)
     login/
@@ -95,8 +101,10 @@ src/
     units.ts            base-unit conversion
     stock.ts            the ONLY place stock changes; writes the ledger
     format.ts           Rupiah / date formatting
+    wages.ts            pay periods, paid days per attendance status, wage arithmetic
+    employees.ts        photo validation, store scoping, re-counting unpaid wages
 prisma/
-  schema.prisma         20 models
+  schema.prisma         36 models
   seed.ts               realistic demo data
 ```
 
@@ -107,6 +115,21 @@ prisma/
 3. **Buat Invoice** picks a delivered, unpaid PO and bills what the customer actually received: qty (at most what was ordered), price (changing it needs `price.manage`), per-line discount and PPN. Posting writes the `Sale` + `SaleLine` (`Sale.orderId`, one invoice per PO), lowers stock, snapshots COGS, awards points and marks the PO `PAID`. Goods not received came back on the truck and never left stock.
 
 An unpaid PO can be cancelled (`VOID`) from Riwayat PO; a delivery can be cancelled until one of its POs is invoiced.
+
+### Employees: karyawan → absensi → upah
+
+1. **Data Karyawan** (`employee.manage`: admin, owner) keeps each employee's photo, gender, birth date, contact, store, `joined_at` / `resign_at`, status, **wage period** and **daily wage**. A login (Pengguna & Peran) is always created *for* an employee and takes its name; renaming the employee renames the login, and making the employee inactive deactivates the login. An employee with a login, attendance or wages can't be deleted, only made inactive.
+2. **Absensi** (`attendance.manage`: admin, owner, and managers for their own store) records one status per employee per day: `PRESENT` = 1 paid day, `HALF_DAY` = ½, `LEAVE` / `SICK` / `ABSENT` = unpaid. Only employees on the payroll that day (between `joined_at` and `resign_at`) can be recorded.
+3. **Upah Karyawan** (`wage.manage`: admin, owner) works one period at a time: a day, a Monday–Sunday week or a calendar month. The sheet lists everyone paid on that period with their days worked; saving writes an `EmployeeWage` per employee, `days × daily wage + allowance − deduction`, as `UNPAID`. Paying marks it `PAID`.
+
+The rules that keep pay and attendance in step:
+
+- **The daily wage and period are copied into the wage** when it is calculated, so raising someone's rate never rewrites pay already worked out.
+- **Each day is paid once**: a wage can't overlap another wage of the same employee (this matters when an employee moves from weekly to monthly pay).
+- **Attendance inside a paid wage is locked.** Undo the payment first (`Batal bayar`) to correct it.
+- **Attendance inside an unpaid wage re-counts that wage** in the same transaction, so the stored days always match the attendance.
+
+Photos are resized in the browser to a 400 px square JPEG, stored in `EmployeePhoto` (not `public/`, which anyone can read) and served by `/api/employees/[id]/photo` behind the session check.
 
 ### Two rules worth knowing
 
@@ -134,7 +157,10 @@ Every endpoint returns `{ ok: true, data }` or `{ ok: false, error }`. Auth is a
 | GET/POST/DELETE | `/api/held-sales` | parked carts |
 | GET | `/api/price-check` | price across all stores |
 | GET | `/api/reports/profit` · `/supplier-comparison` · `/top-members` | |
-| GET/POST/PATCH | `/api/users` | admin only |
+| GET/POST/PATCH | `/api/users` | admin only; POST takes the `employeeId` the login is for |
+| GET/POST/PATCH/DELETE | `/api/employees` (+`?available=1`) · GET `/api/employees/[id]/photo` | photo sent as a data URL in POST/PATCH |
+| GET/PUT | `/api/attendance` | `?date=` one day's sheet, `?from=&to=` recap; PUT saves a day for many employees |
+| GET/POST/PATCH/DELETE | `/api/wages` · POST `/api/wages/pay` | `?period=&date=` pay sheet, otherwise history; pay / undo in bulk |
 
 ---
 

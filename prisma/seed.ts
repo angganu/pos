@@ -1,6 +1,8 @@
-import { PrismaClient, Role, MovementType } from "@prisma/client";
+import { PrismaClient, Role, MovementType, type AttendanceStatus, type Gender, type WagePeriod } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { format } from "date-fns";
 import { docCode } from "../src/lib/format";
+import { addDays, daysBetween, parseDay, periodRange, wageTotal, workDays } from "../src/lib/wages";
 
 const prisma = new PrismaClient();
 
@@ -104,6 +106,47 @@ const ITEMS: ItemSeed[] = [
     stock: { "TK-01": 58 }, min: 24 },
 ];
 
+type EmployeeSeed = {
+  key: string; name: string; gender: Gender; birthDate: string; phone: string; email?: string;
+  joinedAt: string; storeCode: string | null; wagePeriod: WagePeriod; dailyWage: number;
+  /** Days before today they left; they are inactive from then on. */
+  resignedDaysAgo?: number;
+  /** Not on the attendance sheet or the payroll. */
+  noPayroll?: boolean;
+};
+
+/** The first four are the demo logins; the rest work without one. */
+const EMPLOYEES: EmployeeSeed[] = [
+  { key: "admin", name: "Rina Kusuma", gender: "FEMALE", birthDate: "1991-04-12", phone: "0812 2001 410",
+    email: "rina.kusuma@gmail.com", joinedAt: "2023-01-09", storeCode: null, wagePeriod: "MONTHLY", dailyWage: 230000 },
+  { key: "owner", name: "H. Bambang S.", gender: "MALE", birthDate: "1971-08-30", phone: "0811 2245 001",
+    joinedAt: "2019-03-04", storeCode: null, wagePeriod: "MONTHLY", dailyWage: 0, noPayroll: true },
+  { key: "manajer", name: "Dwi Prasetyo", gender: "MALE", birthDate: "1988-11-02", phone: "0813 2167 552",
+    joinedAt: "2021-06-14", storeCode: "TK-01", wagePeriod: "MONTHLY", dailyWage: 185000 },
+  { key: "kasir", name: "Yanti Rahayu", gender: "FEMALE", birthDate: "1998-02-21", phone: "0857 2290 118",
+    joinedAt: "2024-02-05", storeCode: "TK-01", wagePeriod: "WEEKLY", dailyWage: 125000 },
+  { key: "asep", name: "Asep Sunandar", gender: "MALE", birthDate: "1993-07-17", phone: "0822 1873 640",
+    joinedAt: "2022-09-12", storeCode: "TK-01", wagePeriod: "WEEKLY", dailyWage: 115000 },
+  { key: "ujang", name: "Ujang Suparman", gender: "MALE", birthDate: "1985-12-08", phone: "0812 8890 233",
+    joinedAt: "2021-01-18", storeCode: "TK-01", wagePeriod: "WEEKLY", dailyWage: 130000 },
+  { key: "cecep", name: "Cecep Hidayat", gender: "MALE", birthDate: "2001-05-30", phone: "0896 5521 780",
+    joinedAt: "2025-08-04", storeCode: "TK-01", wagePeriod: "DAILY", dailyWage: 100000 },
+  { key: "euis", name: "Euis Komalasari", gender: "FEMALE", birthDate: "1996-10-09", phone: "0858 7714 302",
+    joinedAt: "2025-11-17", storeCode: "TK-01", wagePeriod: "DAILY", dailyWage: 95000 },
+  { key: "iwan", name: "Iwan Setiawan", gender: "MALE", birthDate: "1994-03-25", phone: "0821 4410 965",
+    joinedAt: "2023-05-08", storeCode: "TK-01", wagePeriod: "WEEKLY", dailyWage: 115000, resignedDaysAgo: 18 },
+];
+
+/** A steady, varied attendance pattern: mostly present, now and then something else. */
+function attendanceFor(employee: number, day: number): AttendanceStatus {
+  const roll = (employee * 7919 + day * 104729) % 100;
+  if (roll < 4) return "HALF_DAY";
+  if (roll < 7) return "SICK";
+  if (roll < 9) return "LEAVE";
+  if (roll < 11) return "ABSENT";
+  return "PRESENT";
+}
+
 /** Which suppliers quote which items, priced per THEIR purchase unit. */
 const OFFERS: Record<string, Record<string, number>> = {
   "SP-01": { "BR-001": 250000, "GL-001": 650000, "TP-001": 230000 },
@@ -135,7 +178,9 @@ async function main() {
     prisma.itemUnit.deleteMany(), prisma.item.deleteMany(),
     prisma.category.deleteMany(), prisma.unit.deleteMany(),
     prisma.customer.deleteMany(), prisma.supplier.deleteMany(),
-    prisma.user.deleteMany(), prisma.store.deleteMany(),
+    prisma.employeeWage.deleteMany(), prisma.employeeAttendance.deleteMany(),
+    prisma.user.deleteMany(), prisma.employeePhoto.deleteMany(), prisma.employee.deleteMany(),
+    prisma.store.deleteMany(),
     prisma.setting.deleteMany(),
   ]);
 
@@ -169,22 +214,96 @@ async function main() {
     suppliers.set(s.code, row.id);
   }
 
+  // Local calendar day, as the screens see it.
+  const today = format(new Date(), "yyyy-MM-dd");
+  const employees = new Map<string, number>();
+  for (const e of EMPLOYEES) {
+    const resignAt = e.resignedDaysAgo ? addDays(today, -e.resignedDaysAgo) : null;
+    const row = await prisma.employee.create({
+      data: {
+        name: e.name, gender: e.gender, birthDate: parseDay(e.birthDate), phone: e.phone, email: e.email ?? null,
+        joinedAt: parseDay(e.joinedAt), resignAt: resignAt ? parseDay(resignAt) : null,
+        status: resignAt ? "INACTIVE" : "ACTIVE",
+        storeId: e.storeCode ? stores.get(e.storeCode)! : null,
+        wagePeriod: e.wagePeriod, dailyWage: e.dailyWage,
+      },
+    });
+    employees.set(e.key, row.id);
+  }
+
   const pw = await bcrypt.hash("password123", 10);
   const users = [
-    { name: "Rina Kusuma", email: "admin@satupos.id", role: Role.ADMIN, storeCode: null },
-    { name: "H. Bambang S.", email: "owner@satupos.id", role: Role.OWNER, storeCode: null },
-    { name: "Dwi Prasetyo", email: "manajer@satupos.id", role: Role.MANAGER, storeCode: "TK-01" },
-    { name: "Yanti Rahayu", email: "kasir@satupos.id", role: Role.CASHIER, storeCode: "TK-01" },
+    { employee: "admin", email: "admin@satupos.id", role: Role.ADMIN, storeCode: null },
+    { employee: "owner", email: "owner@satupos.id", role: Role.OWNER, storeCode: null },
+    { employee: "manajer", email: "manajer@satupos.id", role: Role.MANAGER, storeCode: "TK-01" },
+    { employee: "kasir", email: "kasir@satupos.id", role: Role.CASHIER, storeCode: "TK-01" },
   ];
   const userIds = new Map<string, number>();
   for (const u of users) {
     const row = await prisma.user.create({
       data: {
-        name: u.name, email: u.email, passwordHash: pw, role: u.role,
+        name: EMPLOYEES.find((e) => e.key === u.employee)!.name, email: u.email, passwordHash: pw, role: u.role,
+        employeeId: employees.get(u.employee)!,
         storeId: u.storeCode ? stores.get(u.storeCode)! : null,
       },
     });
     userIds.set(u.email, row.id);
+  }
+
+  // Attendance from the start of last month up to yesterday, Sundays off; today is
+  // left open for the Absensi screen.
+  const firstDay = periodRange("MONTHLY", addDays(periodRange("MONTHLY", today).start, -1)).start;
+  const recordedBy = userIds.get("manajer@satupos.id")!;
+  const marks = new Map<string, Map<string, AttendanceStatus>>();
+  for (const [i, e] of EMPLOYEES.entries()) {
+    if (e.noPayroll) continue;
+    const resignAt = e.resignedDaysAgo ? addDays(today, -e.resignedDaysAgo) : today;
+    const lastDay = resignAt < today ? resignAt : addDays(today, -1);
+    const days = daysBetween(firstDay > e.joinedAt ? firstDay : e.joinedAt, lastDay)
+      .filter((d) => parseDay(d).getUTCDay() !== 0);
+    const own = new Map(days.map((d, n) => [d, attendanceFor(i, n)]));
+    marks.set(e.key, own);
+    await prisma.employeeAttendance.createMany({
+      data: [...own].map(([d, status]) => ({
+        employeeId: employees.get(e.key)!, date: parseDay(d), status, userId: recordedBy,
+        note: status === "SICK" ? "Surat dokter" : status === "LEAVE" ? "Acara keluarga" : null,
+      })),
+    });
+  }
+
+  // Wages for every period that has ended: paid, except the latest week, which still
+  // waits for payment, and the last two days of the daily workers, not calculated yet.
+  const wageBy = userIds.get("owner@satupos.id")!;
+  const lastWeek = periodRange("WEEKLY", addDays(periodRange("WEEKLY", today).start, -1));
+  for (const e of EMPLOYEES) {
+    const own = marks.get(e.key);
+    if (!own) continue;
+    const periods: { start: string; end: string }[] = [];
+    for (let d = firstDay; d < today; ) {
+      const p = periodRange(e.wagePeriod, d);
+      if (p.start >= firstDay && p.end < (e.wagePeriod === "DAILY" ? addDays(today, -2) : today)) periods.push(p);
+      d = addDays(p.end, 1);
+    }
+    const data = [];
+    for (const p of periods) {
+      const days = workDays(daysBetween(p.start, p.end).flatMap((d) => own.get(d) ?? []));
+      if (days === 0) continue;
+      // Ujang drives, and gets a meal allowance; Asep pays back a cash advance.
+      const allowance = e.key === "ujang" ? 50000 : 0;
+      const deduction = e.key === "asep" && p.start === lastWeek.start ? 100000 : 0;
+      const paid = !(e.wagePeriod === "WEEKLY" && p.start === lastWeek.start);
+      data.push({
+        employeeId: employees.get(e.key)!, period: e.wagePeriod,
+        periodStart: parseDay(p.start), periodEnd: parseDay(p.end),
+        workDays: days, dailyWage: e.dailyWage, allowance, deduction,
+        total: wageTotal(days, e.dailyWage, allowance, deduction),
+        status: paid ? ("PAID" as const) : ("UNPAID" as const),
+        paidAt: paid ? parseDay(addDays(p.end, 1)) : null,
+        note: allowance ? "Uang makan sopir" : deduction ? "Potong kasbon" : null,
+        userId: wageBy,
+      });
+    }
+    if (data.length) await prisma.employeeWage.createMany({ data });
   }
 
   const items = new Map<string, number>();
@@ -364,7 +483,9 @@ async function main() {
   });
 
   const counts = {
-    stores: STORES.length, users: users.length, items: ITEMS.length,
+    stores: STORES.length, users: users.length, employees: EMPLOYEES.length,
+    attendance: await prisma.employeeAttendance.count(), wages: await prisma.employeeWage.count(),
+    items: ITEMS.length,
     customers: CUSTOMERS.length, suppliers: SUPPLIERS.length,
     orders: await prisma.order.count(), sales: await prisma.sale.count(),
     purchases: await prisma.purchase.count(),

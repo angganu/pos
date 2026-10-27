@@ -22,7 +22,10 @@ export type Permission =
   | "history.view"
   | "reject.manage"
   | "vehicle.manage"
-  | "delivery.manage";
+  | "delivery.manage"
+  | "employee.manage"
+  | "attendance.manage"
+  | "wage.manage";
 
 const MATRIX: Record<Role, Permission[]> = {
   ADMIN: [
@@ -30,18 +33,20 @@ const MATRIX: Record<Role, Permission[]> = {
     "item.manage", "price.manage", "partner.manage", "stock.view", "stock.adjust",
     "transfer.manage", "report.view", "supplier.compare", "store.all", "user.manage",
     "history.view", "reject.manage", "vehicle.manage", "delivery.manage",
+    "employee.manage", "attendance.manage", "wage.manage",
   ],
   OWNER: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
     "item.manage", "price.manage", "partner.manage", "stock.view", "stock.adjust",
     "transfer.manage", "report.view", "supplier.compare", "store.all",
     "history.view", "vehicle.manage", "delivery.manage",
+    "employee.manage", "attendance.manage", "wage.manage",
   ],
   MANAGER: [
     "sale.create", "sale.void", "shift.close", "purchase.manage", "return.manage",
     "price.manage", "partner.manage", "stock.view", "stock.adjust", "transfer.manage",
     "report.view",
-    "history.view", "delivery.manage",
+    "history.view", "delivery.manage", "attendance.manage",
   ],
   CASHIER: [
     "sale.create", "shift.close", "return.manage", "stock.view", "history.view", "reject.manage",
@@ -108,5 +113,8 @@ export const NAV_PERMS: Record<string, Permission> = {
   "riwayat-pengiriman": "history.view",
   banding: "supplier.compare",
   laporan: "report.view",
+  karyawan: "employee.manage",
+  absensi: "attendance.manage",
+  upah: "wage.manage",
   pengguna: "user.manage",
 };

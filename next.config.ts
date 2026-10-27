@@ -37,6 +37,12 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: securityHeaders },
       // Prices, sales and user data must never sit in a shared or browser cache.
       { source: "/api/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
+      // Except employee photos: their URL changes with every new photo, so the browser
+      // may keep each one (private: never a shared cache). Listed last, so it wins.
+      {
+        source: "/api/employees/:id/photo",
+        headers: [{ key: "Cache-Control", value: "private, max-age=31536000, immutable" }],
+      },
     ];
   },
 };

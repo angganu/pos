@@ -8,7 +8,7 @@ import {
   ShoppingCart, Truck, RotateCcw, Package, Tags, Users, Building2, Boxes,
   ArrowLeftRight, BarChart3, GitCompareArrows, FileText, ShieldCheck,
   ChevronUp, Settings, Monitor, User, LogOut, Receipt, PackageSearch, PackageX, CarFront, Route, ScrollText,
-  ReceiptText, ClipboardList,
+  ReceiptText, ClipboardList, IdCard, CalendarCheck, HandCoins,
 } from "lucide-react";
 import { useApp } from "./app-context";
 import { can, type Permission } from "@/lib/rbac";
@@ -45,6 +45,14 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/stok", id: "stok", label: "Stok Toko", en: "Stock", icon: Boxes, perm: "stock.view" },
       { href: "/opname", id: "opname", label: "Transfer & Opname", en: "Count", icon: ArrowLeftRight, perm: "transfer.manage" },
+    ],
+  },
+  {
+    title: "Karyawan / HR",
+    items: [
+      { href: "/karyawan", id: "karyawan", label: "Data Karyawan", en: "Employees", icon: IdCard, perm: "employee.manage" },
+      { href: "/absensi", id: "absensi", label: "Absensi", en: "Attendance", icon: CalendarCheck, perm: "attendance.manage" },
+      { href: "/upah", id: "upah", label: "Upah Karyawan", en: "Wages", icon: HandCoins, perm: "wage.manage" },
     ],
   },
   {
